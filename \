@@ -5,14 +5,11 @@
 #include <string.h>
 
 struct Sheet {
-	char		*sheet;
-	size_t		bytes;
-	unsigned short	nrows;
-	unsigned short	ncols;
+	char	*sheet;
+	size_t	bytes;
 };
 
 static size_t read_file (FILE *const, char **const);
-static void get_sheet_size (struct Sheet *const);
 
 int main (int argc, char **argv)
 {
@@ -23,11 +20,7 @@ int main (int argc, char **argv)
 
 	struct Sheet sheet;
 	memset(&sheet, 0, sizeof(struct Sheet));
-
 	sheet.bytes = read_file(file, &sheet.sheet);
-	get_sheet_size(&sheet);
-
-	printf("c: %d\nr: %d\n", sheet.ncols, sheet.nrows);
 	return 0;
 }
 
@@ -46,19 +39,4 @@ static size_t read_file (FILE *const file, char **const mem)
 
 	fclose(file);
 	return bytes;
-}
-
-static void get_sheet_size (struct Sheet *const sheet)
-{
-	unsigned short nmaxcol = 0;
-	for (register size_t k = 0; k < sheet->bytes; k++) {
-		const char c = sheet->sheet[k];
-		if (c == 10) {
-			nmaxcol = (sheet->ncols > nmaxcol) ? sheet->ncols : nmaxcol;
-			sheet->ncols = 0;
-			sheet->nrows++;
-		}
-		else if (c == '|') sheet->ncols++;
-	}
-	sheet->ncols = nmaxcol;
 }
