@@ -177,6 +177,10 @@ static void start_table_analysis (struct Sheet *const sheet)
 				printf("reference: (%d %d)\n", thstk->as.ref.col, thstk->as.ref.row);
 				break;
 			}
+
+			default: {
+				printf("symbol: %c\n", *thstk->context);
+			}
 		}
 
 		l_offset++;
