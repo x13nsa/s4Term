@@ -30,8 +30,20 @@ enum CellKind {
 	ckind_copy,
 };
 
+struct Reference {
+	unsigned short row;
+	unsigned short col;
+};
+
 struct Token {
+	union {
+		long double number;
+		char *text;
+		struct Reference ref;	
+	} as;
+
 	char		*context;
+	size_t		textlen;
 	enum TokenKind	kind;
 };
 
@@ -133,9 +145,19 @@ static void start_table_analysis (struct Sheet *const sheet)
 		thstk->context = sheet->sheet + k;
 
 		if (thstk->kind == tkind_unknown)
-			e_at_lexing("unknown token", thstk->context, numline, l_offset);
-		l_offset++;
+			e_at_lexing("unknown token", thstk->context, numline, l_offset);	
 
+		if (thstk->kind == tkind_number) {
+			char *ends;
+			thstk->as.number = strtold(thstk->context, &ends);
+
+			const size_t diff = ends - thstk->context - 1;
+			k += diff;
+			l_offset += (unsigned short) diff;
+			printf("number: %Lf\n", thstk->as.number);
+		}
+
+		l_offset++;
 	}
 
 	// free sheet->sheet (?)
