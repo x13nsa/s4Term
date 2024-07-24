@@ -156,17 +156,14 @@ static void start_table_analysis (struct Sheet *const sheet)
 				char *ends;
 				thstk->as.number = strtold(thstk->context, &ends);
 				const size_t advc = ends - thstk->context - 1;
-
 				k += advc;
 				l_offset += (unsigned short) advc;
-				printf("number: %Lf\n", thstk->as.number);
 				break;
 			}
 
 			case tkind_string: {
 				thstk->as.text = thstk->context;
 				thstk->textlen = get_string_token(++thstk->context, &k, &l_offset, &numline);
-				printf("string: %.*s\n", (int) thstk->textlen, thstk->context);
 				break;
 			}
 
@@ -174,12 +171,7 @@ static void start_table_analysis (struct Sheet *const sheet)
 				const size_t advc = get_reference_token(thstk->context, &thstk->as.ref, &numline, &l_offset);
 				k += advc;
 				l_offset += (unsigned short) advc;
-				printf("reference: (%d %d)\n", thstk->as.ref.col, thstk->as.ref.row);
 				break;
-			}
-
-			default: {
-				printf("symbol: %c\n", *thstk->context);
 			}
 		}
 
@@ -210,16 +202,14 @@ static size_t get_string_token (const char *context, size_t *k, unsigned short *
 
 	while (*context != '"' && *context) {
 		context++;
-		*k += 1;
-		*l_off += 1;
 		len++;
 
 		if (*context == '\n')
 			e_at_lexing("multiple line string not allowed", context - len - 1, *nline, *l_off - len);
 	}
 
-	*k += 1;
-	*l_off += 1;
+	*k += len + 1;
+	*l_off += len + 1;
 	return len;
 }
 
