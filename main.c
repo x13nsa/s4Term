@@ -31,8 +31,8 @@ enum CellKind {
 };
 
 struct Reference {
-	unsigned short row;
-	unsigned short col;
+	unsigned int row;
+	unsigned int col;
 };
 
 struct Token {
@@ -65,7 +65,8 @@ static void get_sheet_size (struct Sheet *const);
 static void start_table_analysis (struct Sheet *const);
 static enum TokenKind kind_of_this (const char, const char);
 
-static size_t get_string (const char*);
+static size_t get_string_token (const char*, size_t*, unsigned short*, unsigned short*);
+static size_t get_reference_token (const char*, struct Reference*, unsigned short*, unsigned short*);
 
 int main (int argc, char **argv)
 {
@@ -146,27 +147,36 @@ static void start_table_analysis (struct Sheet *const sheet)
 		thstk->kind = kind_of_this(c, sheet->sheet[k + 1]);
 		thstk->context = sheet->sheet + k;
 
-		if (thstk->kind == tkind_unknown)
-			e_at_lexing("unknown token", thstk->context, numline, l_offset);	
+		switch (thstk->kind) {
+			case tkind_unknown:
+				e_at_lexing("unknown token", thstk->context, numline, l_offset);
+				break;
 
-		if (thstk->kind == tkind_number) {
-			char *ends;
-			thstk->as.number = strtold(thstk->context, &ends);
+			case tkind_number: {
+				char *ends;
+				thstk->as.number = strtold(thstk->context, &ends);
+				const size_t advc = ends - thstk->context - 1;
 
-			const size_t diff = ends - thstk->context - 1;
-			k += diff;
-			l_offset += (unsigned short) diff;
-			printf("number: %Lf\n", thstk->as.number);
-			continue;
-		}
+				k += advc;
+				l_offset += (unsigned short) advc;
+				printf("number: %Lf\n", thstk->as.number);
+				break;
+			}
 
-		else if (thstk->kind == tkind_string) {
-			const size_t len = get_string(++thstk->context);
-			thstk->as.text = thstk->context;
-			thstk->textlen = len;
-			printf("%.*s\n", (int) len, thstk->context);
-			k += len + 1;
-			l_offset += len + 1;
+			case tkind_string: {
+				thstk->as.text = thstk->context;
+				thstk->textlen = get_string_token(++thstk->context, &k, &l_offset, &numline);
+				printf("string: %.*s\n", (int) thstk->textlen, thstk->context);
+				break;
+			}
+
+			case tkind_reference: {
+				const size_t advc = get_reference_token(thstk->context, &thstk->as.ref, &numline, &l_offset);
+				k += advc;
+				l_offset += (unsigned short) advc;
+				printf("reference: (%d %d)\n", thstk->as.ref.col, thstk->as.ref.row);
+				break;
+			}
 		}
 
 		l_offset++;
@@ -190,13 +200,50 @@ static enum TokenKind kind_of_this (const char a, const char b)
 	return isdigit(a) ? tkind_number : tkind_unknown;
 }
 
-static size_t get_string (const char *context)
+static size_t get_string_token (const char *context, size_t *k, unsigned short *l_off, unsigned short *nline)
 {
-	size_t sz = 0;
+	size_t len = 0;
+
 	while (*context != '"' && *context) {
 		context++;
-		sz++;
+		*k += 1;
+		*l_off += 1;
+		len++;
+
+		if (*context == '\n')
+			e_at_lexing("multiple line string not allowed", context - len - 1, *nline, *l_off - len);
 	}
 
-	return sz;
+	*k += 1;
+	*l_off += 1;
+	return len;
+}
+
+static size_t get_reference_token (const char *context, struct Reference *ref, unsigned short *nline, unsigned short *l_off)
+{	
+	size_t b_used = 0;
+	if (!isalpha(*(context + 1))) goto bad_ref;
+
+	++context;
+	b_used++;
+
+	unsigned short level = 0;
+	while (isalpha(*context)) {	
+		ref->col += (level * 26) + (tolower(*context) - 'a');	
+		context++;
+		b_used++;
+		level++;
+	}
+
+	if (!isdigit(*context)) goto bad_ref;
+
+	char *ends;
+	ref->row = (unsigned int) strtold(context, &ends);	
+
+	b_used += ends - context - 1;
+	return b_used;
+
+	bad_ref:
+	e_at_lexing("bad reference definition", context - b_used, *nline, *l_off);
+	return 0;
 }
