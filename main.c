@@ -4,8 +4,10 @@
 #include <getopt.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 #define	MAX_NUMBER_OF_TOKENS_PER_CELL	256
+#define	MAX_LENGTH_FOR_CELL_CONTENT	32
 
 enum TokenKind {
 	tkind_string		= '"',
@@ -48,6 +50,8 @@ struct Token {
 };
 
 struct Cell {
+	char		final[MAX_LENGTH_FOR_CELL_CONTENT];
+	unsigned short	width;
 	enum CellKind	kind;
 };
 
@@ -59,6 +63,25 @@ struct Sheet {
 	unsigned short	ncols;
 };
 
+/*  ____________________________________
+ * / error for cells; does not kill the \
+ * \ program!                           /
+ * ------------------------------------
+ *        \   ^__^
+ *         \  (@@)\_______
+ *            (__)\       )\/\
+ *                ||----w |
+ *                ||     ||
+ */
+enum CellErrorKind {
+	ckerr_empty	= 0,
+};
+
+struct CellError {
+	char	*error;
+	size_t	len;
+};
+
 static size_t read_file (FILE *const, char **const);
 static void get_sheet_size (struct Sheet *const);
 
@@ -67,6 +90,9 @@ static enum TokenKind kind_of_this (const char, const char);
 
 static size_t get_string_token (const char*, size_t*, unsigned short*, unsigned short*);
 static size_t get_reference_token (const char*, struct Reference*, unsigned short*, unsigned short*);
+
+static void set_cell (struct Cell *const, struct Token *const, const unsigned short);
+static void set_cell_as_error (struct Cell *const, const enum CellErrorKind);
 
 int main (int argc, char **argv)
 {
@@ -127,21 +153,36 @@ static void start_table_analysis (struct Sheet *const sheet)
 	unsigned short l_offset = 1;
 	unsigned short numline  = 1;
 	unsigned short tkexpr_i	= 0;
+	unsigned short n_tokens = 0;
+
+	struct Cell *ths_cell = &sheet->cells[0];
 
 	for (size_t k = 0; k < sheet->bytes; k++) {
 		const char c = sheet->sheet[k];
 
 		if (isspace(c)) {
-			if (c == 10) { numline++; l_offset = 0; }
+			if (c == 10) {
+				ths_cell = &sheet->cells[numline++ * sheet->ncols];
+				l_offset = 0;
+			}
 			l_offset++;
 			continue;
 		}
+
 		if (c == '|') {
+			set_cell(ths_cell, this_expr, n_tokens);
 			memset(this_expr, 0, sizeof(struct Token) * MAX_NUMBER_OF_TOKENS_PER_CELL);
-			tkexpr_i = 0;
+
+			ths_cell++;
 			l_offset++;
+
+			tkexpr_i = 0;
+			n_tokens = 0;
 			continue;
 		}
+
+		if (tkexpr_i == MAX_NUMBER_OF_TOKENS_PER_CELL)
+			e_at_lexing("token overflow (max is %d)", sheet->sheet + k, numline, l_offset, MAX_NUMBER_OF_TOKENS_PER_CELL);
 
 		struct Token *thstk = &this_expr[tkexpr_i++];
 		thstk->kind = kind_of_this(c, sheet->sheet[k + 1]);
@@ -176,9 +217,8 @@ static void start_table_analysis (struct Sheet *const sheet)
 		}
 
 		l_offset++;
+		n_tokens++;
 	}
-
-	// free sheet->sheet (?)
 }
 
 static enum TokenKind kind_of_this (const char a, const char b)
@@ -241,3 +281,23 @@ static size_t get_reference_token (const char *context, struct Reference *ref, u
 	e_at_lexing("bad reference definition", context - b_used, *nline, *l_off);
 	return 0;
 }
+
+
+static void set_cell (struct Cell *const cell, struct Token *const tokens, const unsigned short n_tkns)
+{
+	if (!n_tkns) {
+		set_cell_as_error(cell, ckerr_empty);
+		return;	
+	}
+}
+
+static void set_cell_as_error (struct Cell *const cell, const enum CellErrorKind wh)
+{
+	static const struct CellError errors[] = {
+		{"!empty-cell", 12}
+	};
+	snprintf(cell->final, errors[wh].len, "%s", errors[wh].error);
+	cell->kind = ckind_error;
+	printf("%s\n", cell->final);
+}
+
