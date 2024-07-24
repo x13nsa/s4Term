@@ -4,6 +4,7 @@
 void e_print_usage (void);
 void e_system (const char *const);
 
-void e_check_ptr (const void *const);
+void e_check_ptr (const void *const, const char *const);
+void e_at_lexing (const char *const, const char*, const unsigned short, const unsigned short, ...);
 
 #endif
