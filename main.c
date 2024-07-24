@@ -65,6 +65,8 @@ static void get_sheet_size (struct Sheet *const);
 static void start_table_analysis (struct Sheet *const);
 static enum TokenKind kind_of_this (const char, const char);
 
+static size_t get_string (const char*);
+
 int main (int argc, char **argv)
 {
 	if (argc == 1) e_print_usage();
@@ -155,6 +157,16 @@ static void start_table_analysis (struct Sheet *const sheet)
 			k += diff;
 			l_offset += (unsigned short) diff;
 			printf("number: %Lf\n", thstk->as.number);
+			continue;
+		}
+
+		else if (thstk->kind == tkind_string) {
+			const size_t len = get_string(++thstk->context);
+			thstk->as.text = thstk->context;
+			thstk->textlen = len;
+			printf("%.*s\n", (int) len, thstk->context);
+			k += len + 1;
+			l_offset += len + 1;
 		}
 
 		l_offset++;
@@ -176,4 +188,15 @@ static enum TokenKind kind_of_this (const char a, const char b)
 	if (a == '-')
 		return isdigit(b) ? tkind_number : tkind_mul_sign;
 	return isdigit(a) ? tkind_number : tkind_unknown;
+}
+
+static size_t get_string (const char *context)
+{
+	size_t sz = 0;
+	while (*context != '"' && *context) {
+		context++;
+		sz++;
+	}
+
+	return sz;
 }
