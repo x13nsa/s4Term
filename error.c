@@ -4,47 +4,33 @@
 #include <stdlib.h>
 #include <stdarg.h>
 
-void e_print_usage (void)
+void error_usage (void)
 {
-	fprintf(stderr, "\ts4Term [basic version] - compiled at %s %s\n", __DATE__, __TIME__);
-	fputs("\tusage: s4Term [filename]\n", stderr);
+	static const char *usage = "\ts4Term - Spreadsheet for terminal, compiled %s %s\n"
+	                           "\tUsage: s4term [args] [-s sheetname]\n"
+							   "\tArgs:\n"
+							   "\t  -o <!>    output file\n"
+							   "\t  -h        display this message\n";
+	fprintf(stderr, usage, __DATE__, __TIME__);
 	exit(EXIT_SUCCESS);
 }
 
-void e_system (const char *const msg)
+void error_fatal (const char *err, ...)
 {
-	fprintf(stderr, "\t[s4Term:error]: %s\n", msg);
-	perror("\tsystem error");
-	exit(EXIT_FAILURE);
-}
+	fputs("\t[s4Term:error]: fatal error\n\t", stderr);
 
-void e_check_ptr (const void *const ptr, const char *const where)
-{
-	if (ptr) return;
-	e_system(where);
-}
-
-void e_at_lexing (const char *const fmt, const char* tok, const unsigned short nline, const unsigned short loff, ...)
-{
 	va_list args;
-	va_start(args, loff);
-
-	unsigned short len = 0;
-	unsigned char stop = 0;
-	fprintf(stderr, "\t[s4Term:error]: error at lexing at (%d:%d)\n\t", nline, loff);
-
-	while (*tok != '\n')
-	{
-		if (*tok == ' ') stop = 1;
-		if (!stop) len++;
-
-		fputc(*tok++, stderr);
-	}
-
-	fprintf(stderr, "\n\t%.*s\n\t", len, "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
-	fprintf(stderr, fmt, args);
+	va_start(args, err);
+	vfprintf(stderr, err, args);
 
 	fputc(10, stderr);
+	if (errno) perror("\n\tsystem message");
 	va_end(args);
 	exit(EXIT_FAILURE);
+}
+
+void error_check_ptr (const void *const a)
+{
+	if (a) return;
+	error_fatal("memory troubles");
 }

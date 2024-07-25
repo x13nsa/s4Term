@@ -1,12 +1,11 @@
-objs = main.o error.o
-exec = s4Term
+objs	= main.o error.o
+std	= -std=c99
+opt	= -O0
+avoid	= -Wno-switch
+flags	= -Wall -Wextra -Wpedantic $(std) $(opt) $(avoid)
+exec	= s4term
 
-optmz = -O0
-avoid = -Wno-switch
-std = -std=c99
-flags = -Wall -Wextra -Wpedantic $(optmz) $(avoid) $(std)
-
-all: $(exec)
+all:	$(exec)
 
 $(exec): $(objs)
 	gcc	-o $(exec) $(objs)
