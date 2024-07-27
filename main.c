@@ -8,6 +8,10 @@
 #define	MAX_TEXT_LENGTH		32
 #define	MAX_TOKENS_PER_CELL	64
 
+enum ErrLexKind {
+	errlex_text_overflow	= 0,
+};
+
 enum TokenType {
 	ttype_next_cell 	= '|',
 	ttype_text			= '"',
@@ -38,7 +42,7 @@ enum CellType {
 };
 
 union Value {
-	struct			{ char *msg; unsigned short len; } text;
+	struct			{ char *src; unsigned short len; } text;
 	union Value		*reference;
 	long double		number;
 };
@@ -60,7 +64,7 @@ struct Lexer {
 	size_t			t_bytes;
 	size_t			at;
 	unsigned short	numline;
-	unsigned short	line_offset;
+	unsigned short	linepos;
 	unsigned short	cell;
 };
 
@@ -79,6 +83,8 @@ static void get_table_dimensions (const char*, unsigned short*, unsigned short*)
 
 static void analyze_table (struct SheetInfo *const);
 static enum TokenType que_es_esto (struct Lexer *const);
+
+static void get_token_as_a_string (union Value *const, struct Lexer *const);
 
 int main (int argc, char **argv) {
 	if (argc == 1) error_usage();
@@ -156,9 +162,12 @@ static void analyze_table (struct SheetInfo *const sheet)
 
 	while (lex->at < lex->t_bytes) {
 		if (thsc->expr_len == MAX_TOKENS_PER_CELL)
-			abort();
+			error_at_lexer(lex->src + lex->at, "maximum number of tokens reached (%d)", lex->numline, lex->linepos, MAX_TOKENS_PER_CELL);
 
 		thsv->type = que_es_esto(lex);
+
+		if (thsv->type == ttype_text)
+			get_token_as_a_string(&thsv->as, lex);
 
 		thsc->expr_len++;
 		thsv++;
@@ -168,13 +177,13 @@ static void analyze_table (struct SheetInfo *const sheet)
 static enum TokenType que_es_esto (struct Lexer *const lex)
 {
 	const char a = lex->src[lex->at++];
-	lex->line_offset++;
+	lex->linepos++;
 
 	if (isspace(a)) {
 		if (a == 10) {
 			lex->numline++;
 			lex->cell = 0;
-			lex->line_offset = 0;
+			lex->linepos = 0;
 		}
 		return ttype_is_space;
 	}
@@ -194,3 +203,21 @@ static enum TokenType que_es_esto (struct Lexer *const lex)
 
 	return isdigit(a) ? ttype_is_number : ttype_is_unknonw;
 }
+
+static void get_token_as_a_string (union Value *const str, struct Lexer *const lex)
+{
+	const unsigned starts_at = lex->linepos;
+	str->text.src = lex->src + lex->at;
+
+	while (lex->src[lex->at++] != '"') {
+		if (str->text.len == MAX_TEXT_LENGTH)
+			error_at_lexer(str->text.src, "text overflow, max length is %d", lex->numline, starts_at, MAX_TEXT_LENGTH);
+
+		lex->linepos++;
+		str->text.len++;
+	}
+
+	lex->linepos++;
+	printf("string: <%.*s>\n", str->text.len, str->text.src);
+}
+

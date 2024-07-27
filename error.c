@@ -32,3 +32,18 @@ void error_check_ptr (const void *const p)
 	if (p) return;
 	error_fatal("your ran out of memory :(");
 }
+
+void error_at_lexer (const char *con, const char *const msg, unsigned short nline, unsigned short lpos, ...)
+{
+	va_list args;
+	va_start(args, lpos);
+	fprintf(stderr, "\t[s4term:error]: error while lexing at (%d:%d)\n\t", nline, lpos);
+
+	while (*con != '\n')
+		fputc(*con++, stderr);
+	fputs("\n\n\t", stderr);
+
+	vfprintf(stderr, msg, args);
+	fputc(10, stderr);
+	exit(EXIT_FAILURE);
+}
