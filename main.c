@@ -181,10 +181,11 @@ static void analyze_table (struct SheetInfo *const sheet)
 		else if (thsv->type == ttype_reference)
 			get_token_as_a_reference(&thsv->as, lex);
 		else
-			printf("symbol: %c\n", *(lex->src + lex->at - 1));
+			continue;
+			//printf("symbol: %c\n", *(lex->src + lex->at - 1));
 
-		thsc->expr_len++;
-		thsv++;
+		//thsc->expr_len++;
+		//thsv++;
 	}
 }
 
@@ -227,6 +228,7 @@ static enum TokenType que_es_esto (struct Lexer *const lex)
 
 static void get_token_as_a_string (union Value *const str, struct Lexer *const lex)
 {
+		str->text.len = 0;
 	const unsigned starts_at = lex->linepos;
 	str->text.src = lex->src + lex->at;
 
@@ -241,7 +243,7 @@ static void get_token_as_a_string (union Value *const str, struct Lexer *const l
 	}
 
 	lex->linepos++;
-	printf("string: <%.*s>\n", str->text.len, str->text.src);
+	//printf("string: <%.*s>\n", str->text.len, str->text.src);
 }
 
 static void get_token_as_a_number (long double *const num, struct Lexer *const lex)
@@ -258,7 +260,7 @@ static void get_token_as_a_number (long double *const num, struct Lexer *const l
 	lex->at      += diff;
 
 	*num = number;
-	printf("number: <%Lf>\n", *num);
+	//printf("number: <%Lf>\n", *num);
 }
 
 static void get_token_as_a_reference (union Value *const ref, struct Lexer *const lex)
@@ -286,7 +288,7 @@ static void get_token_as_a_reference (union Value *const ref, struct Lexer *cons
 	lex->linepos += adv;
 	lex->at      += adv;
 
-	printf("reference: %d %d\n", ref->reference.col, ref->reference.row);
+	//printf("reference: %d %d\n", ref->reference.col, ref->reference.row);
 
 	return;
 	malformed:
