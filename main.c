@@ -10,10 +10,6 @@
 #define	MAX_TEXT_LENGTH		32
 #define	MAX_TOKENS_PER_CELL	64
 
-enum ErrLexKind {
-	errlex_text_overflow	= 0,
-};
-
 enum TokenType {
 	ttype_next_cell 	= '|',
 	ttype_text			= '"',
@@ -45,7 +41,7 @@ enum CellType {
 
 union Value {
 	struct			{ char *src; unsigned short len; } text;
-	union Value		*reference;
+	struct			{ unsigned short col; unsigned short row; union Value *at; } reference;
 	long double		number;
 };
 
@@ -88,6 +84,8 @@ static enum TokenType que_es_esto (struct Lexer *const);
 
 static void get_token_as_a_string (union Value *const, struct Lexer *const);
 static void get_token_as_a_number (long double *const, struct Lexer *const);
+
+static void get_token_as_a_reference (union Value *const, struct Lexer *const);
 
 int main (int argc, char **argv) {
 	if (argc == 1) error_usage();
@@ -164,7 +162,6 @@ static void analyze_table (struct SheetInfo *const sheet)
 	struct Token *thsv = &tokens[0];
 
 	while (lex->at < lex->t_bytes) {
-		printf("with: %p\n", thsv);
 		if (thsc->expr_len == MAX_TOKENS_PER_CELL)
 			error_at_lexer(lex->src + lex->at, "maximum number of tokens reached (%d)", lex->numline, lex->linepos, MAX_TOKENS_PER_CELL);
 
@@ -179,8 +176,12 @@ static void analyze_table (struct SheetInfo *const sheet)
 
 		if (thsv->type == ttype_text)
 			get_token_as_a_string(&thsv->as, lex);
-		if (thsv->type == ttype_is_number)
+		else if (thsv->type == ttype_is_number)
 			get_token_as_a_number(&thsv->as.number, lex);
+		else if (thsv->type == ttype_reference)
+			get_token_as_a_reference(&thsv->as, lex);
+		else
+			printf("symbol: %c\n", *(lex->src + lex->at - 1));
 
 		thsc->expr_len++;
 		thsv++;
@@ -258,4 +259,36 @@ static void get_token_as_a_number (long double *const num, struct Lexer *const l
 
 	*num = number;
 	printf("number: <%Lf>\n", *num);
+}
+
+static void get_token_as_a_reference (union Value *const ref, struct Lexer *const lex)
+{
+	size_t adv = 0;
+	char *c	   = lex->src + lex->at;
+
+	if (!isalpha(*c))
+		goto malformed;
+
+	unsigned short depth = 0;
+	while (isalpha(*c)) {
+		const char col = tolower(*c++);
+		ref->reference.col += (depth++ * 26) + (col - 'a');
+		adv++;
+	}
+
+	if (!isdigit(*c))
+		goto malformed;
+
+	char *ends;
+	ref->reference.row = (unsigned short) strtoul(c, &ends, 10);
+
+	adv += ends - c - 1;
+	lex->linepos += adv;
+	lex->at      += adv;
+
+	printf("reference: %d %d\n", ref->reference.col, ref->reference.row);
+
+	return;
+	malformed:
+	error_at_lexer(c - adv - 1, "malformed reference", lex->numline, lex->linepos);
 }
