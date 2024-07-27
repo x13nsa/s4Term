@@ -1,174 +1,196 @@
 #include "error.h"
 #include <stdio.h>
 #include <ctype.h>
+#include <string.h>
 #include <getopt.h>
 #include <stdlib.h>
-#include <string.h>
 
-enum TokenKind {
-	tkind_string		= '"',
-	tkind_next_cell		= '|',
-	tkind_reference		= '@',
-	tkind_clone_top		= '^',
-	tkind_clone_down	= 'v',
-	tkind_clone_left	= '<',
-	tkind_clone_right	= '>',
-	tkind_minus			= '-',
-	tkind_addition		= '+',
-	tkind_division		= '/',
-	tkind_mult			= '*',
-	tkind_expression	= '=',
+#define	MAX_TEXT_LENGTH		32
+#define	MAX_TOKENS_PER_CELL	64
 
-	tkind_number		= 256,
-	tkind_unknown		= 257,
-	tkind_whitespace	= 258
+enum TokenType {
+	ttype_next_cell 	= '|',
+	ttype_text			= '"',
+	ttype_reference 	= '@',
+	ttype_expression	= '=',
+	ttype_clone_up		= '^',
+	ttype_clone_left	= '<',
+	ttype_clone_right	= '>',
+	ttype_clone_down	= 'v',
+	ttype_sub_sign		= '-',
+	ttype_add_sign		= '+',
+	ttype_mul_sign		= '*',
+	ttype_div_sign		= '/',
+
+	ttype_is_space		= 128,
+	ttype_is_number		= 129,
+	ttype_is_unknonw	= 130
+};
+
+enum CellType {
+	ctype_number,
+	ctype_text,
+	ctype_clone_up,
+	ctype_clone_down,
+	ctype_clone_left,
+	ctype_clone_right,
+	ctype_error
+};
+
+union Value {
+	struct			{ char *msg; unsigned short len; } text;
+	union Value		*reference;
+	long double		number;
+};
+
+struct Token {
+	union Value		as;
+	enum TokenType	type;
 };
 
 struct Cell {
-		int a;
+	union Value		as;
+	struct Token	*expression;
+	unsigned short	expr_len;
+	enum CellType	type;
 };
 
-struct SheetLex {
+struct Lexer {
 	char			*src;
-	size_t			sz;
+	size_t			t_bytes;
 	size_t			at;
 	unsigned short	numline;
-	unsigned short	l_off;
+	unsigned short	line_offset;
+	unsigned short	cell;
 };
 
-struct Sheet {
-	struct SheetLex	lexer;
-	struct Cell		*cells;
+struct SheetInfo {
+	struct Lexer	lexer;
+	struct Cell		*grid;
 	char			*in_filename;
 	char			*out_filename;
 	unsigned short	rows;
 	unsigned short	cols;
+	unsigned short	cell;
 };
 
-static void read_sheet (struct Sheet *const);
-static void get_table_size (struct Sheet *const);
+static void read_file (const char *const, struct Lexer *const);
+static void get_table_dimensions (const char*, unsigned short*, unsigned short*);
 
-static void analyze_table (struct Sheet *const);
-static enum TokenKind get_kind (struct SheetLex *const);
+static void analyze_table (struct SheetInfo *const);
+static enum TokenType que_es_esto (struct Lexer *const);
 
-int main (int argc, char **argv)
-{
+int main (int argc, char **argv) {
 	if (argc == 1) error_usage();
 
-	struct Sheet sheet;
-	memset(&sheet, 0, sizeof(struct Sheet));
+	struct SheetInfo sheet;
+	memset(&sheet, 0, sizeof(struct SheetInfo));
 
-	opterr = 0;
 	int op;
+	opterr = 0;
 
 	while ((op = getopt(argc, argv, ":s:o:h")) != -1) {
 		switch (op) {
-			case 's': sheet.in_filename = optarg; break;
+			case 's': sheet.in_filename  = optarg; break;
 			case 'o': sheet.out_filename = optarg; break;
 			default: error_usage();
 		}
 	}
 
-	if (!sheet.in_filename) error_fatal("no sheet provied");
+	read_file(sheet.in_filename, &sheet.lexer);
+	get_table_dimensions(sheet.lexer.src, &sheet.rows, &sheet.cols);
 
-	read_sheet(&sheet);
-	get_table_size(&sheet);
-
-	sheet.cells = (struct Cell*) calloc(sheet.rows * sheet.cols, sizeof(struct Cell));
-	error_check_ptr(sheet.cells);
+	sheet.grid = (struct Cell*) calloc(sheet.rows * sheet.cols, sizeof(struct Cell));
+	error_check_ptr(sheet.grid);
 
 	analyze_table(&sheet);
-
-	free(sheet.lexer.src);
-	free(sheet.cells);
 	return 0;
 }
 
-static void read_sheet (struct Sheet *const s)
+static void read_file (const char *const filename, struct Lexer *const lexer)
 {
-	FILE *f = fopen(s->in_filename, "r");
-	if (!f)
-		error_fatal("sheet provied does not work: `%s'", s->in_filename);
+	if (!filename) error_usage();
+	FILE *file = fopen(filename, "r");
 
-	fseek(f, 0, SEEK_END);
-	s->lexer.sz = ftell(f);
-	fseek(f, 0, SEEK_SET);
+	if (!file)
+		error_fatal("`%s' sheet given does not work", filename);
 
-	s->lexer.src = (char*) calloc(s->lexer.sz + 1, sizeof(char));
-	error_check_ptr(s->lexer.src);
+	fseek(file, 0, SEEK_END);
+	lexer->t_bytes = ftell(file);
+	fseek(file, 0, SEEK_SET);
 
-	const size_t read_B = fread(s->lexer.src, 1, s->lexer.sz, f);
-	if (read_B != s->lexer.sz)
-		error_fatal("only %ld bytes out of %ld were read", read_B, s->lexer.sz);
-	fclose(f);
+	lexer->src = (char*) calloc(lexer->t_bytes + 1, sizeof(char));
+	error_check_ptr(lexer->src);
+
+	const size_t r_bytes = fread(lexer->src, 1, lexer->t_bytes, file);
+	if (r_bytes != lexer->t_bytes)
+		error_fatal("cannot read whole file, only %ld out of %ld bytes were read", r_bytes, lexer->t_bytes);
+	fclose(file);
 }
 
-static void get_table_size (struct Sheet *const s)
+static void get_table_dimensions (const char *s, unsigned short *r, unsigned short *c)
 {
-	unsigned short maxcol = 0;
-
-	for (register size_t b = 0; b < s->lexer.sz; b++) {
-		const char a = s->lexer.src[b];
-		if (a == '\n') {
-			maxcol  = (maxcol > s->cols) ? maxcol : s->cols;
-			s->cols = 0;
-			s->rows++;
-		} else if (a == '|') s->cols++;
+	unsigned short maxc = 0;
+	while (*s) {
+		const char ch = *s++;
+		if (ch == '\n') {
+			maxc = (*c > maxc) ? *c : maxc;
+			*r += 1;
+			*c = 0;
+		} else if (ch == '|') *c += 1;
 	}
 
-	s->cols = maxcol;
+	*c = maxc;
 }
 
-static void analyze_table (struct Sheet *const s)
+static void analyze_table (struct SheetInfo *const sheet)
 {
-	while (s->lexer.at < s->lexer.sz) {
-		switch (get_kind(&s->lexer)) {
-			case tkind_whitespace: continue;
-			case tkind_unknown: break;
+	struct Token tokens[MAX_TOKENS_PER_CELL];
+	memset(tokens, 0, sizeof(struct Token) * MAX_TOKENS_PER_CELL);
 
-			case tkind_next_cell: {
-				break;
-			}
+	struct Lexer *lex = &sheet->lexer;
+	lex->numline = 1;
 
-			case tkind_string: {
-				break;
-			}
+	struct Cell  *thsc = &sheet->grid[0];
+	struct Token *thsv = &tokens[0];
 
-			case tkind_reference: {
-				break;
-			}
+	while (lex->at < lex->t_bytes) {
+		if (thsc->expr_len == MAX_TOKENS_PER_CELL)
+			abort();
 
-			case tkind_number: {
-				break;
-			}
-		}
+		thsv->type = que_es_esto(lex);
+
+		thsc->expr_len++;
+		thsv++;
 	}
 }
 
-static enum TokenKind get_kind (struct SheetLex *const lex)
+static enum TokenType que_es_esto (struct Lexer *const lex)
 {
-	const char c = lex->src[lex->at++];
-	lex->l_off++;
+	const char a = lex->src[lex->at++];
+	lex->line_offset++;
 
-	if (isspace(c)) {
-		if (c == '\n') {
-			lex->l_off = 1;
+	if (isspace(a)) {
+		if (a == 10) {
 			lex->numline++;
+			lex->cell = 0;
+			lex->line_offset = 0;
 		}
-		return tkind_whitespace;
+		return ttype_is_space;
 	}
 
-	switch (c) {
-		case '|': case '"':
-		case '<': case '>':
-		case '^': case 'v':
-		case '+': case '*':
-		case '/': case '@':
-		case '=': return c;
+	switch (a) {
+		case '|': case '"': case '@': case '^':
+		case '<': case '>': case 'v': case '=':
+		case '+': case '*': case '/': return a;
 	}
 
-	if (c == '-')
-		return isdigit(lex->src[lex->at + 1]) ? tkind_number : tkind_minus;
-	return isdigit(c) ? tkind_number : tkind_unknown;
+	const char b = lex->src[lex->at];
+	if (a == '-')
+		return isdigit(b) ?  ttype_is_number : ttype_sub_sign;
+
+	if ((a == '0') && (b == 'x'))
+		return ttype_is_number;
+
+	return isdigit(a) ? ttype_is_number : ttype_is_unknonw;
 }
-
