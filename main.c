@@ -1,7 +1,9 @@
 #include "error.h"
+#include <errno.h>
 #include <stdio.h>
 #include <ctype.h>
 #include <string.h>
+#include <limits.h>
 #include <getopt.h>
 #include <stdlib.h>
 
@@ -85,6 +87,7 @@ static void analyze_table (struct SheetInfo *const);
 static enum TokenType que_es_esto (struct Lexer *const);
 
 static void get_token_as_a_string (union Value *const, struct Lexer *const);
+static void get_token_as_a_number (long double *const, struct Lexer *const);
 
 int main (int argc, char **argv) {
 	if (argc == 1) error_usage();
@@ -161,13 +164,23 @@ static void analyze_table (struct SheetInfo *const sheet)
 	struct Token *thsv = &tokens[0];
 
 	while (lex->at < lex->t_bytes) {
+		printf("with: %p\n", thsv);
 		if (thsc->expr_len == MAX_TOKENS_PER_CELL)
 			error_at_lexer(lex->src + lex->at, "maximum number of tokens reached (%d)", lex->numline, lex->linepos, MAX_TOKENS_PER_CELL);
 
 		thsv->type = que_es_esto(lex);
 
+		if (thsv->type == ttype_is_unknonw)
+			error_at_lexer(lex->src + lex->at - 1, "unknown token", lex->numline, lex->linepos);
+		if (thsv->type == ttype_is_space)
+			continue;
+		if (thsv->type == ttype_next_cell)
+			continue;
+
 		if (thsv->type == ttype_text)
 			get_token_as_a_string(&thsv->as, lex);
+		if (thsv->type == ttype_is_number)
+			get_token_as_a_number(&thsv->as.number, lex);
 
 		thsc->expr_len++;
 		thsv++;
@@ -195,8 +208,15 @@ static enum TokenType que_es_esto (struct Lexer *const lex)
 	}
 
 	const char b = lex->src[lex->at];
-	if (a == '-')
+
+	if (a == '-') {
+		const char c = ((lex->at + 1) < lex->t_bytes) ? lex->src[lex->at + 1] : 0;
+
+		if ((b == '0') && (c == 'x'))
+			return ttype_is_number;
+
 		return isdigit(b) ?  ttype_is_number : ttype_sub_sign;
+	}
 
 	if ((a == '0') && (b == 'x'))
 		return ttype_is_number;
@@ -212,6 +232,8 @@ static void get_token_as_a_string (union Value *const str, struct Lexer *const l
 	while (lex->src[lex->at++] != '"') {
 		if (str->text.len == MAX_TEXT_LENGTH)
 			error_at_lexer(str->text.src, "text overflow, max length is %d", lex->numline, starts_at, MAX_TEXT_LENGTH);
+		if (lex->src[lex->at] == '\n')
+			error_at_lexer(str->text.src, "multiline string not allowed", lex->numline, starts_at);
 
 		lex->linepos++;
 		str->text.len++;
@@ -221,3 +243,19 @@ static void get_token_as_a_string (union Value *const str, struct Lexer *const l
 	printf("string: <%.*s>\n", str->text.len, str->text.src);
 }
 
+static void get_token_as_a_number (long double *const num, struct Lexer *const lex)
+{
+	char *ends;
+	char *from = lex->src + lex->at - 1;
+	long double number = strtold(from, &ends);
+
+	if (errno || (number >= LLONG_MAX))
+		error_at_lexer(from, "number overflow", lex->numline, lex->linepos);
+
+	const size_t diff = ends - from - 1;
+	lex->linepos += diff;
+	lex->at      += diff;
+
+	*num = number;
+	printf("number: <%Lf>\n", *num);
+}
