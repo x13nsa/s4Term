@@ -417,8 +417,11 @@ static void print_outsheet (const struct SheetInfo *const sheet)
 			cell = &sheet->grid[row * sheet->cols + col];
 
 			if (cell->type == ctype_number) {
-				const char *fmt = (cell->is_hex) ? "%llx |" : "%Lf |";
-				fprintf(outf, fmt, (long long int)cell->as.number);
+				const char *fmt = (cell->is_hex) ? "0x%llx |" : "%Lf |";
+				if (cell->is_hex)
+					fprintf(outf, fmt, (long long int)cell->as.number);
+				else
+					fprintf(outf, fmt, cell->as.number);
 				continue;
 			}
 			if (cell->type != ctype_error_unsolved)
