@@ -43,7 +43,7 @@ enum CellType {
 
 union Value {
 	struct			{ char *src; unsigned short len; } text;
-	struct			{ unsigned short col; unsigned short row; union Value *at; } reference;
+	struct			{ unsigned short col; unsigned short row; } reference;
 	long double		number;
 };
 
@@ -65,7 +65,6 @@ struct Lexer {
 	size_t			at;
 	unsigned short	numline;
 	unsigned short	linepos;
-	unsigned short	cell;
 };
 
 struct SheetInfo {
@@ -73,9 +72,9 @@ struct SheetInfo {
 	struct Cell		*grid;
 	char			*in_filename;
 	char			*out_filename;
+	unsigned int	t_cells;
 	unsigned short	rows;
 	unsigned short	cols;
-	unsigned short	cell;
 };
 
 struct ErrCell {
@@ -93,10 +92,9 @@ static void get_token_as_a_string (union Value *const, struct Lexer *const);
 static void get_token_as_a_number (long double *const, struct Lexer *const);
 
 static void get_token_as_a_reference (union Value *const, struct Lexer *const);
-static void solve_cell (struct Cell *const, struct Token *const);
+static void solve_cell (struct SheetInfo *const, struct Cell *const, struct Token *const);
 
 static void set_error_on_cell (struct Cell *const, const enum CellType);
-
 static void print_outsheet (const struct SheetInfo *const);
 
 int main (int argc, char **argv) {
@@ -119,7 +117,9 @@ int main (int argc, char **argv) {
 	read_file(sheet.in_filename, &sheet.lexer);
 	get_table_dimensions(sheet.lexer.src, &sheet.rows, &sheet.cols);
 
-	sheet.grid = (struct Cell*) calloc(sheet.rows * sheet.cols, sizeof(struct Cell));
+
+	sheet.t_cells = sheet.rows * sheet.cols;
+	sheet.grid    = (struct Cell*) calloc(sheet.t_cells, sizeof(struct Cell));
 	error_check_ptr(sheet.grid);
 
 	analyze_table(&sheet);
@@ -193,7 +193,7 @@ static void analyze_table (struct SheetInfo *const sheet)
 		}
 
 		if (thsv->type == ttype_next_cell) {
-			solve_cell(thsc, tokens);
+			solve_cell(sheet, thsc, tokens);
 			thsc++;
 			thsv = &tokens[0];
 			continue;
@@ -219,7 +219,6 @@ static enum TokenType que_es_esto (struct Lexer *const lex)
 	if (isspace(a)) {
 		if (a == 10) {
 			lex->numline++;
-			lex->cell = 0;
 			lex->linepos = 0;
 			return ttype_is_newline;
 		}
@@ -315,8 +314,13 @@ static void get_token_as_a_reference (union Value *const ref, struct Lexer *cons
 	error_at_lexer(c - adv - 1, "malformed reference", lex->numline, lex->linepos);
 }
 
-static void solve_cell (struct Cell *const cell, struct Token *const expression)
+static void solve_cell (struct SheetInfo *const sheet, struct Cell *const cell, struct Token *const expression)
 {
+	/* Should reference by a pair of numbers which marks the row
+	 * and column of the cell to be copied, or should it be the cell
+	 * itself.
+	 * */
+
 	if (cell->expr_len == 0) {
 		set_error_on_cell(cell, ctype_error_empty);
 		return;
