@@ -1,91 +1,13 @@
+#include "s4term.h"
+#include "exprns.h"
 #include "error.h"
+
 #include <errno.h>
-#include <stdio.h>
 #include <ctype.h>
 #include <string.h>
 #include <limits.h>
 #include <getopt.h>
 #include <stdlib.h>
-
-#define	MAX_TEXT_LENGTH		128
-#define	MAX_TOKENS_PER_CELL	32
-
-#define	true	1
-#define	false	0
-typedef unsigned char	bool_t;
-
-
-enum TokenType {
-	ttype_next_cell 	= '|',
-	ttype_text			= '"',
-	ttype_reference 	= '@',
-	ttype_expression	= '=',
-	ttype_clone_up		= '^',
-	ttype_clone_left	= '<',
-	ttype_clone_right	= '>',
-	ttype_clone_down	= 'v',
-	ttype_sub_sign		= '-',
-	ttype_add_sign		= '+',
-	ttype_mul_sign		= '*',
-	ttype_div_sign		= '/',
-	ttype_is_space		= 128,
-	ttype_is_newline	= 129,
-	ttype_is_number		= 130,
-	ttype_is_unknonw	= 131
-};
-
-enum CellType {
-	ctype_error_unsolved	= 0,
-	ctype_error_nosense		= 1,
-	ctype_error_selfref		= 2,
-
-	ctype_number			= 50,
-	ctype_text				= 51,
-	ctype_clone_up			= 52,
-	ctype_clone_down		= 53,
-	ctype_clone_left		= 54,
-	ctype_clone_right		= 55
-};
-
-struct Cell;
-
-union Value {
-	struct			{ char *src; unsigned short len; } text;
-	struct Cell		*reference;
-	long double		number;
-};
-
-struct Token {
-	union Value		as;
-	enum TokenType	type;
-	bool_t			is_hex;
-};
-
-struct Cell {
-	union Value		as;
-	struct Token	*expression;
-	unsigned short	expr_len;
-	enum CellType	type;
-	bool_t			is_hex;
-};
-
-struct Lexer {
-	char			*src;
-	size_t			t_bytes;
-	size_t			at;
-	unsigned short	numline;
-	unsigned short	linepos;
-};
-
-struct SheetInfo {
-	struct Lexer	lexer;
-	struct Cell		*grid;
-	char			*in_filename;
-	char			*out_filename;
-	unsigned int	t_cells;
-	unsigned short	rows;
-	unsigned short	cols;
-};
 
 struct ErrCell {
 	char	*error;
@@ -244,7 +166,8 @@ static enum TokenType que_es_esto (struct Lexer *const lex, bool_t *ishex)
 	switch (a) {
 		case '|': case '"': case '@': case '^':
 		case '<': case '>': case 'v': case '=':
-		case '+': case '*': case '/': return a;
+		case '+': case '*': case '/': case '(':
+		case ')': return a;
 	}
 
 	const char b = lex->src[lex->at];
@@ -373,6 +296,9 @@ static void solve_cell (struct SheetInfo *const sheet, struct Cell *const cell, 
 			break;
 
 		case ttype_expression:
+			const bool_t status = expr_solve_expr(cell, expression);
+			break;
+
 		case ttype_clone_up:
 		case ttype_clone_down:
 		case ttype_clone_left:
@@ -390,6 +316,10 @@ static void solve_cell_reference (struct Cell *const cell, struct Cell *const re
 		set_error_on_cell(cell, ctype_error_selfref);
 		return;
 	}
+	if (ref > cell) {
+		set_error_on_cell(cell, ctype_error_further_ref);
+		return;
+	}
 
 	memcpy(cell, ref, sizeof(struct Cell));
 }
@@ -399,7 +329,8 @@ static void set_error_on_cell (struct Cell *const cell, const enum CellType wh)
 	static const struct ErrCell errors[] = {
 		{"![unsolved]",		8},
 		{"![non-sense]",	12},
-		{"![self-ref]",		11}
+		{"![self-ref]",		11},
+		{"![further-ref]",  14},
 	};
 
 	cell->as.text.src = errors[wh].error;
@@ -415,6 +346,9 @@ static void print_outsheet (const struct SheetInfo *const sheet)
 {
 	struct Cell *cell;
 	FILE *outf = stdout;
+
+	if (sheet->out_filename)
+		outf = fopen(sheet->out_filename, "a+");
 
 	for (unsigned short row = 0; row < sheet->rows; row++) {
 		for (unsigned short col = 0; col < sheet->cols; col++) {
@@ -432,6 +366,7 @@ static void print_outsheet (const struct SheetInfo *const sheet)
 				fprintf(outf, "%.*s |", cell->as.text.len, cell->as.text.src);
 			else
 				fprintf(outf, " |");
+
 		}
 		fputc('\n', outf);
 	}
