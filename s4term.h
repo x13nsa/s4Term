@@ -5,6 +5,8 @@
 #define	MAX_TEXT_LENGTH		128
 #define	MAX_TOKENS_PER_CELL	32
 
+#define	CELL_IS_ERR(a)		((a >= ctype_error_unsolved) && (a <= ctype_error_div_by_zero))
+
 #define	true	1
 #define	false	0
 typedef unsigned char	bool_t;
@@ -37,6 +39,8 @@ enum CellType {
 	ctype_error_selfref		= 2,
 	ctype_error_further_ref	= 3,
 	ctype_error_expr_ovrflw	= 4,
+	ctype_error_malformedex	= 5,
+	ctype_error_div_by_zero	= 6,
 
 	ctype_number			= 50,
 	ctype_text				= 51,
