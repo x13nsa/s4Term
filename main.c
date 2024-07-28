@@ -407,6 +407,10 @@ static void set_error_on_cell (struct Cell *const cell, const enum CellType wh)
 	cell->type = wh;
 }
 
+
+/*
+ * TODO: improve this function.
+ * */
 static void print_outsheet (const struct SheetInfo *const sheet)
 {
 	struct Cell *cell;
