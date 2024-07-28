@@ -7,8 +7,8 @@
 #include <getopt.h>
 #include <stdlib.h>
 
-#define	MAX_TEXT_LENGTH		32
-#define	MAX_TOKENS_PER_CELL	64
+#define	MAX_TEXT_LENGTH		128
+#define	MAX_TOKENS_PER_CELL	32
 
 enum TokenType {
 	ttype_next_cell 	= '|',
@@ -23,20 +23,22 @@ enum TokenType {
 	ttype_add_sign		= '+',
 	ttype_mul_sign		= '*',
 	ttype_div_sign		= '/',
-
 	ttype_is_space		= 128,
-	ttype_is_number		= 129,
-	ttype_is_unknonw	= 130
+	ttype_is_newline	= 129,
+	ttype_is_number		= 130,
+	ttype_is_unknonw	= 131
 };
 
 enum CellType {
-	ctype_number,
-	ctype_text,
-	ctype_clone_up,
-	ctype_clone_down,
-	ctype_clone_left,
-	ctype_clone_right,
-	ctype_error
+	ctype_error_empty	= 0,
+	ctype_error_nosense	= 1,
+
+	ctype_number		= 50,
+	ctype_text			= 51,
+	ctype_clone_up		= 52,
+	ctype_clone_down	= 53,
+	ctype_clone_left	= 54,
+	ctype_clone_right	= 55
 };
 
 union Value {
@@ -76,6 +78,11 @@ struct SheetInfo {
 	unsigned short	cell;
 };
 
+struct ErrCell {
+	char	*error;
+	size_t	length;
+};
+
 static void read_file (const char *const, struct Lexer *const);
 static void get_table_dimensions (const char*, unsigned short*, unsigned short*);
 
@@ -86,6 +93,11 @@ static void get_token_as_a_string (union Value *const, struct Lexer *const);
 static void get_token_as_a_number (long double *const, struct Lexer *const);
 
 static void get_token_as_a_reference (union Value *const, struct Lexer *const);
+static void solve_cell (struct Cell *const, struct Token *const);
+
+static void set_error_on_cell (struct Cell *const, const enum CellType);
+
+static void print_outsheet (const struct SheetInfo *const);
 
 int main (int argc, char **argv) {
 	if (argc == 1) error_usage();
@@ -111,6 +123,8 @@ int main (int argc, char **argv) {
 	error_check_ptr(sheet.grid);
 
 	analyze_table(&sheet);
+	print_outsheet(&sheet);
+
 	return 0;
 }
 
@@ -171,8 +185,19 @@ static void analyze_table (struct SheetInfo *const sheet)
 			error_at_lexer(lex->src + lex->at - 1, "unknown token", lex->numline, lex->linepos);
 		if (thsv->type == ttype_is_space)
 			continue;
-		if (thsv->type == ttype_next_cell)
+
+		if (thsv->type == ttype_is_newline) {
+			const size_t adv = sheet->cols * (sheet->lexer.numline - 1);
+			thsc = &sheet->grid[adv];
 			continue;
+		}
+
+		if (thsv->type == ttype_next_cell) {
+			solve_cell(thsc, tokens);
+			thsc++;
+			thsv = &tokens[0];
+			continue;
+		}
 
 		if (thsv->type == ttype_text)
 			get_token_as_a_string(&thsv->as, lex);
@@ -180,12 +205,9 @@ static void analyze_table (struct SheetInfo *const sheet)
 			get_token_as_a_number(&thsv->as.number, lex);
 		else if (thsv->type == ttype_reference)
 			get_token_as_a_reference(&thsv->as, lex);
-		else
-			continue;
-			//printf("symbol: %c\n", *(lex->src + lex->at - 1));
 
-		//thsc->expr_len++;
-		//thsv++;
+		thsc->expr_len++;
+		thsv++;
 	}
 }
 
@@ -199,6 +221,7 @@ static enum TokenType que_es_esto (struct Lexer *const lex)
 			lex->numline++;
 			lex->cell = 0;
 			lex->linepos = 0;
+			return ttype_is_newline;
 		}
 		return ttype_is_space;
 	}
@@ -228,7 +251,6 @@ static enum TokenType que_es_esto (struct Lexer *const lex)
 
 static void get_token_as_a_string (union Value *const str, struct Lexer *const lex)
 {
-		str->text.len = 0;
 	const unsigned starts_at = lex->linepos;
 	str->text.src = lex->src + lex->at;
 
@@ -243,7 +265,6 @@ static void get_token_as_a_string (union Value *const str, struct Lexer *const l
 	}
 
 	lex->linepos++;
-	//printf("string: <%.*s>\n", str->text.len, str->text.src);
 }
 
 static void get_token_as_a_number (long double *const num, struct Lexer *const lex)
@@ -260,7 +281,6 @@ static void get_token_as_a_number (long double *const num, struct Lexer *const l
 	lex->at      += diff;
 
 	*num = number;
-	//printf("number: <%Lf>\n", *num);
 }
 
 static void get_token_as_a_reference (union Value *const ref, struct Lexer *const lex)
@@ -288,9 +308,76 @@ static void get_token_as_a_reference (union Value *const ref, struct Lexer *cons
 	lex->linepos += adv;
 	lex->at      += adv;
 
-	//printf("reference: %d %d\n", ref->reference.col, ref->reference.row);
-
 	return;
 	malformed:
 	error_at_lexer(c - adv - 1, "malformed reference", lex->numline, lex->linepos);
+}
+
+static void solve_cell (struct Cell *const cell, struct Token *const expression)
+{
+	if (cell->expr_len == 0) {
+		set_error_on_cell(cell, ctype_error_empty);
+		return;
+	}
+
+	struct Token head = expression[0];
+
+	switch (head.type) {
+		case ttype_is_number:
+			cell->as.number = head.as.number;
+			cell->type = ctype_number;
+			break;
+
+		case ttype_text:
+			cell->as.text.src = head.as.text.src;
+			cell->as.text.len = head.as.text.len;
+			cell->type = ctype_text;
+			break;
+
+		case ttype_expression:
+		case ttype_clone_up:
+		case ttype_clone_down:
+		case ttype_clone_left:
+		case ttype_clone_right:
+		case ttype_reference:
+			break;
+
+		default:
+			set_error_on_cell(cell, ctype_error_nosense);
+			return;
+	}
+}
+
+static void set_error_on_cell (struct Cell *const cell, const enum CellType wh)
+{
+	static const struct ErrCell errors[] = {
+		{"![empty]",      8},
+		{"![non-sense]", 12}
+	};
+
+	cell->as.text.src = errors[wh].error;
+	cell->as.text.len = errors[wh].length;
+	cell->type = wh;
+}
+
+static void print_outsheet (const struct SheetInfo *const sheet)
+{
+	struct Cell *cell;
+	FILE *outf = stdout;
+
+	for (unsigned short row = 0; row < sheet->rows; row++) {
+		for (unsigned short col = 0; col < sheet->cols; col++) {
+			cell = &sheet->grid[row * sheet->cols + col];
+
+			if (cell->type == ctype_number) {
+				fprintf(outf, "%Lf |", cell->as.number);
+				continue;
+			}
+			if (cell->type != ctype_error_empty)
+				fprintf(outf, "%.*s |", cell->as.text.len, cell->as.text.src);
+			else
+				fprintf(outf, " |");
+		}
+		fputc('\n', outf);
+	}
 }
