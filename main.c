@@ -251,6 +251,8 @@ static enum TokenType que_es_esto (struct Lexer *const lex)
 
 static void get_token_as_a_string (union Value *const str, struct Lexer *const lex)
 {
+	str->text.len = 0;
+
 	const unsigned starts_at = lex->linepos;
 	str->text.src = lex->src + lex->at;
 
@@ -334,13 +336,14 @@ static void solve_cell (struct Cell *const cell, struct Token *const expression)
 			cell->type = ctype_text;
 			break;
 
+		case ttype_reference:
+			break;
+
 		case ttype_expression:
 		case ttype_clone_up:
 		case ttype_clone_down:
 		case ttype_clone_left:
 		case ttype_clone_right:
-		case ttype_reference:
-			break;
 
 		default:
 			set_error_on_cell(cell, ctype_error_nosense);
@@ -380,4 +383,6 @@ static void print_outsheet (const struct SheetInfo *const sheet)
 		}
 		fputc('\n', outf);
 	}
+
+	fclose(outf);
 }
