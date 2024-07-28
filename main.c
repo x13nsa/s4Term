@@ -30,20 +30,23 @@ enum TokenType {
 };
 
 enum CellType {
-	ctype_error_empty	= 0,
-	ctype_error_nosense	= 1,
+	ctype_error_unsolved	= 0,
+	ctype_error_nosense		= 1,
+	ctype_error_selfref		= 2,
 
-	ctype_number		= 50,
-	ctype_text			= 51,
-	ctype_clone_up		= 52,
-	ctype_clone_down	= 53,
-	ctype_clone_left	= 54,
-	ctype_clone_right	= 55
+	ctype_number			= 50,
+	ctype_text				= 51,
+	ctype_clone_up			= 52,
+	ctype_clone_down		= 53,
+	ctype_clone_left		= 54,
+	ctype_clone_right		= 55
 };
+
+struct Cell;
 
 union Value {
 	struct			{ char *src; unsigned short len; } text;
-	struct			{ unsigned short col; unsigned short row; } reference;
+	struct Cell		*reference;
 	long double		number;
 };
 
@@ -91,10 +94,12 @@ static enum TokenType que_es_esto (struct Lexer *const);
 static void get_token_as_a_string (union Value *const, struct Lexer *const);
 static void get_token_as_a_number (long double *const, struct Lexer *const);
 
-static void get_token_as_a_reference (union Value *const, struct Lexer *const);
+static unsigned int get_pos_of_ref (struct Lexer *const, const unsigned int, const unsigned short);
 static void solve_cell (struct SheetInfo *const, struct Cell *const, struct Token *const);
 
 static void set_error_on_cell (struct Cell *const, const enum CellType);
+static void solve_cell_reference (struct Cell *const, struct Cell *const);
+
 static void print_outsheet (const struct SheetInfo *const);
 
 int main (int argc, char **argv) {
@@ -203,8 +208,10 @@ static void analyze_table (struct SheetInfo *const sheet)
 			get_token_as_a_string(&thsv->as, lex);
 		else if (thsv->type == ttype_is_number)
 			get_token_as_a_number(&thsv->as.number, lex);
-		else if (thsv->type == ttype_reference)
-			get_token_as_a_reference(&thsv->as, lex);
+		else if (thsv->type == ttype_reference) {
+			const unsigned int at = get_pos_of_ref(lex, sheet->t_cells, sheet->cols);
+			thsv->as.reference = &sheet->grid[at];
+		}
 
 		thsc->expr_len++;
 		thsv++;
@@ -284,7 +291,11 @@ static void get_token_as_a_number (long double *const num, struct Lexer *const l
 	*num = number;
 }
 
-static void get_token_as_a_reference (union Value *const ref, struct Lexer *const lex)
+/* Given a token of the form @COLROW this function computes
+ * the position where such reference can be found within the
+ * grid.
+ * */
+static unsigned int get_pos_of_ref (struct Lexer *const lex, const unsigned int lim, const unsigned short rowidth)
 {
 	size_t adv = 0;
 	char *c	   = lex->src + lex->at;
@@ -293,9 +304,11 @@ static void get_token_as_a_reference (union Value *const ref, struct Lexer *cons
 		goto malformed;
 
 	unsigned short depth = 0;
+	unsigned short col = 0;
+
 	while (isalpha(*c)) {
-		const char col = tolower(*c++);
-		ref->reference.col += (depth++ * 26) + (col - 'a');
+		const char a = tolower(*c++);
+		col += (depth++ * 26) + (a - 'a');
 		adv++;
 	}
 
@@ -303,26 +316,28 @@ static void get_token_as_a_reference (union Value *const ref, struct Lexer *cons
 		goto malformed;
 
 	char *ends;
-	ref->reference.row = (unsigned short) strtoul(c, &ends, 10);
+	const unsigned short row = (unsigned short) strtoul(c, &ends, 10);
 
 	adv += ends - c - 1;
 	lex->linepos += adv;
 	lex->at      += adv;
 
-	return;
-	malformed:
-	error_at_lexer(c - adv - 1, "malformed reference", lex->numline, lex->linepos);
+	const unsigned int pos = (unsigned int) (row * rowidth + col);
+	if (pos >= lim)
+		error_at_lexer(lex->src + lex->at - adv - 1, "reference otta bounds; %d is given but maximum cell index is %d", lex->numline, lex->linepos, pos, lim - 1);
+
+	return pos;
+
+	malformed: {
+		error_at_lexer(c - adv - 1, "malformed reference", lex->numline, lex->linepos);
+		return 0;
+	}
 }
 
 static void solve_cell (struct SheetInfo *const sheet, struct Cell *const cell, struct Token *const expression)
 {
-	/* Should reference by a pair of numbers which marks the row
-	 * and column of the cell to be copied, or should it be the cell
-	 * itself.
-	 * */
-
 	if (cell->expr_len == 0) {
-		set_error_on_cell(cell, ctype_error_empty);
+		set_error_on_cell(cell, ctype_error_unsolved);
 		return;
 	}
 
@@ -341,6 +356,7 @@ static void solve_cell (struct SheetInfo *const sheet, struct Cell *const cell, 
 			break;
 
 		case ttype_reference:
+			solve_cell_reference(cell, head.as.reference);
 			break;
 
 		case ttype_expression:
@@ -355,11 +371,22 @@ static void solve_cell (struct SheetInfo *const sheet, struct Cell *const cell, 
 	}
 }
 
+static void solve_cell_reference (struct Cell *const cell, struct Cell *const ref)
+{
+	if (cell == ref) {
+		set_error_on_cell(cell, ctype_error_selfref);
+		return;
+	}
+
+	memcpy(cell, ref, sizeof(struct Cell));
+}
+
 static void set_error_on_cell (struct Cell *const cell, const enum CellType wh)
 {
 	static const struct ErrCell errors[] = {
-		{"![empty]",      8},
-		{"![non-sense]", 12}
+		{"![unsolved]",		8},
+		{"![non-sense]",	12},
+		{"![self-ref]",		11}
 	};
 
 	cell->as.text.src = errors[wh].error;
@@ -380,7 +407,7 @@ static void print_outsheet (const struct SheetInfo *const sheet)
 				fprintf(outf, "%Lf |", cell->as.number);
 				continue;
 			}
-			if (cell->type != ctype_error_empty)
+			if (cell->type != ctype_error_unsolved)
 				fprintf(outf, "%.*s |", cell->as.text.len, cell->as.text.src);
 			else
 				fprintf(outf, " |");

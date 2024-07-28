@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <ctype.h>
 
 void error_usage (void)
 {
@@ -37,10 +38,14 @@ void error_at_lexer (const char *con, const char *const msg, unsigned short nlin
 {
 	va_list args;
 	va_start(args, lpos);
-	fprintf(stderr, "\t[s4term:error]: error while lexing at (%d:%d)\n\t", nline, lpos);
+	fprintf(stderr, "\t[s4term:error]: error while lexing at (%d:%d)\n\t\x1b[5;31m", nline, lpos);
 
-	while (*con != '\n')
-		fputc(*con++, stderr);
+	while (*con != '\n') {
+		const char a = *con++;
+		if (isspace(a))
+			fprintf(stderr, "\x1b[0m");
+		fputc(a, stderr);
+	}
 	fputs("\n\n\t", stderr);
 
 	vfprintf(stderr, msg, args);
