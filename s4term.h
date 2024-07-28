@@ -36,6 +36,7 @@ enum CellType {
 	ctype_error_nosense		= 1,
 	ctype_error_selfref		= 2,
 	ctype_error_further_ref	= 3,
+	ctype_error_expr_ovrflw	= 4,
 
 	ctype_number			= 50,
 	ctype_text				= 51,

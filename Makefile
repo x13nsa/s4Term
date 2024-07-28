@@ -1,4 +1,4 @@
-objs = main.o error.o exprns.o
+objs = exprns.o #main.o error.o exprns.o
 std = -std=c99
 opt = -O0
 ign = -Wno-switch
