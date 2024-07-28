@@ -10,6 +10,11 @@
 #define	MAX_TEXT_LENGTH		128
 #define	MAX_TOKENS_PER_CELL	32
 
+#define	true	1
+#define	false	0
+typedef unsigned char	bool_t;
+
+
 enum TokenType {
 	ttype_next_cell 	= '|',
 	ttype_text			= '"',
@@ -53,6 +58,7 @@ union Value {
 struct Token {
 	union Value		as;
 	enum TokenType	type;
+	bool_t			is_hex;
 };
 
 struct Cell {
@@ -60,6 +66,7 @@ struct Cell {
 	struct Token	*expression;
 	unsigned short	expr_len;
 	enum CellType	type;
+	bool_t			is_hex;
 };
 
 struct Lexer {
@@ -89,7 +96,7 @@ static void read_file (const char *const, struct Lexer *const);
 static void get_table_dimensions (const char*, unsigned short*, unsigned short*);
 
 static void analyze_table (struct SheetInfo *const);
-static enum TokenType que_es_esto (struct Lexer *const);
+static enum TokenType que_es_esto (struct Lexer *const, bool_t*);
 
 static void get_token_as_a_string (union Value *const, struct Lexer *const);
 static void get_token_as_a_number (long double *const, struct Lexer *const);
@@ -184,7 +191,7 @@ static void analyze_table (struct SheetInfo *const sheet)
 		if (thsc->expr_len == MAX_TOKENS_PER_CELL)
 			error_at_lexer(lex->src + lex->at, "maximum number of tokens reached (%d)", lex->numline, lex->linepos, MAX_TOKENS_PER_CELL);
 
-		thsv->type = que_es_esto(lex);
+		thsv->type = que_es_esto(lex, &thsv->is_hex);
 
 		if (thsv->type == ttype_is_unknonw)
 			error_at_lexer(lex->src + lex->at - 1, "unknown token", lex->numline, lex->linepos);
@@ -206,8 +213,10 @@ static void analyze_table (struct SheetInfo *const sheet)
 
 		if (thsv->type == ttype_text)
 			get_token_as_a_string(&thsv->as, lex);
+
 		else if (thsv->type == ttype_is_number)
 			get_token_as_a_number(&thsv->as.number, lex);
+
 		else if (thsv->type == ttype_reference) {
 			const unsigned int at = get_pos_of_ref(lex, sheet->t_cells, sheet->cols);
 			thsv->as.reference = &sheet->grid[at];
@@ -218,7 +227,7 @@ static void analyze_table (struct SheetInfo *const sheet)
 	}
 }
 
-static enum TokenType que_es_esto (struct Lexer *const lex)
+static enum TokenType que_es_esto (struct Lexer *const lex, bool_t *ishex)
 {
 	const char a = lex->src[lex->at++];
 	lex->linepos++;
@@ -242,15 +251,18 @@ static enum TokenType que_es_esto (struct Lexer *const lex)
 
 	if (a == '-') {
 		const char c = ((lex->at + 1) < lex->t_bytes) ? lex->src[lex->at + 1] : 0;
-
-		if ((b == '0') && (c == 'x'))
+		if ((b == '0') && (c == 'x')) {
+			*ishex = true;
 			return ttype_is_number;
+		}
 
 		return isdigit(b) ?  ttype_is_number : ttype_sub_sign;
 	}
 
-	if ((a == '0') && (b == 'x'))
+	if ((a == '0') && (b == 'x')) {
+		*ishex = true;
 		return ttype_is_number;
+	}
 
 	return isdigit(a) ? ttype_is_number : ttype_is_unknonw;
 }
@@ -347,6 +359,7 @@ static void solve_cell (struct SheetInfo *const sheet, struct Cell *const cell, 
 		case ttype_is_number:
 			cell->as.number = head.as.number;
 			cell->type = ctype_number;
+			cell->is_hex = head.is_hex;
 			break;
 
 		case ttype_text:
@@ -404,7 +417,8 @@ static void print_outsheet (const struct SheetInfo *const sheet)
 			cell = &sheet->grid[row * sheet->cols + col];
 
 			if (cell->type == ctype_number) {
-				fprintf(outf, "%Lf |", cell->as.number);
+				const char *fmt = (cell->is_hex) ? "%llx |" : "%Lf |";
+				fprintf(outf, fmt, (long long int)cell->as.number);
 				continue;
 			}
 			if (cell->type != ctype_error_unsolved)
