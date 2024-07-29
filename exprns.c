@@ -84,8 +84,21 @@ static enum CellType push_stack (struct Output *const out, const struct Token *c
 		return ctype_error_expr_ovrflw;
 
 	enum CellType status = ctype_number;
-	if (out->stk_i == QUEUE_SIZE)
+
+	if ((out->stk_i == QUEUE_SIZE) || (tok->type == ttype_left_p))
 		goto push;
+
+	if (tok->type == ttype_right_p) {
+		struct Token *top;
+		do {
+			top = &out->output[--out->stk_i];
+			if (top->type == ttype_left_p)
+				break;
+			status = push_queue(out, top);
+		} while ((out->stk_i > QUEUE_SIZE) && !CELL_IS_ERR(status));
+
+		return status;
+	}
 
 	do {
 		const struct Token *top = &out->output[out->stk_i - 1];
@@ -105,6 +118,7 @@ static enum CellType push_stack (struct Output *const out, const struct Token *c
 
 static bool_t exchange_operators (const enum TokenType prev, const enum TokenType new)
 {
+	if (prev == ttype_left_p) return false;
 	if (prev == new) return true;
 
 	const bool_t newslow = ((new == '+') || (new == '-'));
@@ -135,20 +149,15 @@ int main ()
 {
 	struct Token tokens[] = {
 		{ .as.number = 0,	.type = ttype_expression,	.is_hex = false },
-
+		{ .as.number = 0,	.type = ttype_left_p,		.is_hex = false },
 		{ .as.number = 4,	.type = ttype_is_number,	.is_hex = false },
 		{ .as.number = 0,	.type = ttype_add_sign,		.is_hex = false },
-
 		{ .as.number = 5,	.type = ttype_is_number,	.is_hex = false },
+		{ .as.number = 0,	.type = ttype_right_p,		.is_hex = false },
 		{ .as.number = 0,	.type = ttype_div_sign,		.is_hex = false },
-
 		{ .as.number = 6,	.type = ttype_is_number,	.is_hex = false },
 		{ .as.number = 0,	.type = ttype_sub_sign,		.is_hex = false },
-
 		{ .as.number = 7,	.type = ttype_is_number,	.is_hex = false },
-		{ .as.number = 0,	.type = ttype_add_sign,		.is_hex = false },
-
-		{ .as.number = 8,	.type = ttype_is_number,	.is_hex = false },
 	};
 
 	printf("\nstatus: %d\n", expr_solve_expr(NULL, tokens));
