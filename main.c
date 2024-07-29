@@ -31,7 +31,8 @@ static void solve_cell_reference (struct Cell *const, struct Cell *const);
 
 static void print_outsheet (const struct SheetInfo *const);
 
-int main (int argc, char **argv) {
+int main (int argc, char **argv)
+{
 	if (argc == 1) error_usage();
 
 	struct SheetInfo sheet;
@@ -94,7 +95,6 @@ static void get_table_dimensions (const char *s, unsigned short *r, unsigned sho
 			*c = 0;
 		} else if (ch == '|') *c += 1;
 	}
-
 	*c = maxc;
 }
 
@@ -192,6 +192,9 @@ static enum TokenType que_es_esto (struct Lexer *const lex, bool_t *ishex)
 
 static void get_token_as_a_string (union Value *const str, struct Lexer *const lex)
 {
+	/* Faster than using memset each time a new cell
+	 * is reached.
+	 * */
 	str->text.len = 0;
 
 	const unsigned starts_at = lex->linepos;
@@ -296,7 +299,12 @@ static void solve_cell (struct SheetInfo *const sheet, struct Cell *const cell, 
 			break;
 
 		case ttype_expression:
-			const bool_t status = expr_solve_expr(cell, expression);
+			const enum CellType status = expr_solve_expr(cell, expression);
+			if (CELL_IS_ERR(status)) {
+				set_error_on_cell(cell, status);
+				return;
+			}
+			cell->type = ctype_number;
 			break;
 
 		case ttype_clone_up:
@@ -327,10 +335,13 @@ static void solve_cell_reference (struct Cell *const cell, struct Cell *const re
 static void set_error_on_cell (struct Cell *const cell, const enum CellType wh)
 {
 	static const struct ErrCell errors[] = {
-		{"![unsolved]",		8},
-		{"![non-sense]",	12},
-		{"![self-ref]",		11},
-		{"![further-ref]",  14},
+		{"![unsolved]",			8},
+		{"![non-sense]",		12},
+		{"![self-ref]",			11},
+		{"![further-ref]",  	14},
+		{"![overflow-ex]",		14},
+		{"![malformed-ex]",		15},
+		{"![zero-division]",	16}
 	};
 
 	cell->as.text.src = errors[wh].error;
@@ -338,8 +349,7 @@ static void set_error_on_cell (struct Cell *const cell, const enum CellType wh)
 	cell->type = wh;
 }
 
-/*
- * TODO: improve this function.
+/* TODO: improve this function.
  * */
 static void print_outsheet (const struct SheetInfo *const sheet)
 {
@@ -361,8 +371,10 @@ static void print_outsheet (const struct SheetInfo *const sheet)
 					fprintf(outf, fmt, cell->as.number);
 				continue;
 			}
+
 			if (cell->type != ctype_error_unsolved)
 				fprintf(outf, "%.*s |", cell->as.text.len, cell->as.text.src);
+
 			else
 				fprintf(outf, " |");
 
