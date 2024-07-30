@@ -1,9 +1,0 @@
-"This is a simple sheet" 			| @a4		| @c0	|
-"Let's print some numbers"			|			|		|
-454									| 3.4234	| -9.8	|
-@a2									| @b2		| @c2	|
-"This is how a register looks like"	|			|		|
-0xffffffffffffff					| "rax"		| "8B"	|
-0xffffffff							| "eax"		| "4B"	|
-0xffff								| "ax"		| "2B"	|
-0xff								| "al"		| "1B"	|

@@ -1,17 +1,16 @@
-objs = main.o error.o exprns.o
-std = -std=c99
-opt = -O0
-ign = -Wno-switch
-flags = -Wall -Wextra -Wpedantic $(std) $(opt) $(ign)
-exec = s4term
+objs  = main.o error.o
+std   = -std=c99
+avoid = -Wno-switch
+optmz = -O0
+flags = -Wall -Wextra -Wpedantic $(std) $(avoid) $(optmz)
+exec  = s4tb
 
 all: $(exec)
 
 $(exec): $(objs)
 	gcc	-o $(exec) $(objs)
-
 %.o: %.c
 	gcc	-c $@ $< $(flags)
-
 clean:
-	rm	-f $(objs) $(exec)
+	rm	-r $(objs) $(exec)
+
