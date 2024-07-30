@@ -3,7 +3,7 @@
 #include <stdio.h>
 
 #define	MAX_TEXT_LENGTH		128
-#define	MAX_TOKENS_PER_CELL	32
+#define	MAX_TOKENS_PER_CELL	64
 
 #define	CELL_IS_ERR(a)		((a >= ctype_error_unsolved) && (a <= ctype_error_div_by_zero))
 

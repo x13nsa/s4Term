@@ -66,8 +66,9 @@ enum CellType expr_solve_expr (struct Cell *const cell, const struct Token *expr
 
 static enum CellType push_queue (struct Output *const out, const struct Token *const tok)
 {
-	if (out->que_i == QUEUE_SIZE)
+	if (out->que_i == QUEUE_SIZE) {
 		return ctype_error_expr_ovrflw;
+	}
 
 	struct Token *this = &out->output[out->que_i++];
 	this->as.number = tok->as.number;

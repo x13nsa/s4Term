@@ -106,8 +106,9 @@ static void analyze_table (struct SheetInfo *const sheet)
 	struct Lexer *lex = &sheet->lexer;
 	lex->numline = 1;
 
-	struct Cell  *thsc = &sheet->grid[0];
-	struct Token *thsv = &tokens[0];
+	struct Cell  *thsc  = &sheet->grid[0];
+	struct Token *thsv  = &tokens[0];
+	unsigned int c_cell = 0;
 
 	while (lex->at < lex->t_bytes) {
 		if (thsc->expr_len == MAX_TOKENS_PER_CELL)
@@ -128,7 +129,8 @@ static void analyze_table (struct SheetInfo *const sheet)
 
 		if (thsv->type == ttype_next_cell) {
 			solve_cell(sheet, thsc, tokens);
-			thsc++;
+			if (++c_cell < sheet->t_cells)
+				thsc++;
 			thsv = &tokens[0];
 			continue;
 		}

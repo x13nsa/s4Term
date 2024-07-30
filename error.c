@@ -40,13 +40,14 @@ void error_at_lexer (const char *con, const char *const msg, unsigned short nlin
 	va_start(args, lpos);
 	fprintf(stderr, "\t[s4term:error]: error while lexing at (%d:%d)\n\t\x1b[5;31m", nline, lpos);
 
-	while (*con != '\n') {
-		const char a = *con++;
+	do {
+		const char a = *con;
 		if (isspace(a))
 			fprintf(stderr, "\x1b[0m");
 		fputc(a, stderr);
-	}
-	fputs("\n\n\t", stderr);
+	} while (*con++ != '\n');
+
+	fputs("\n\t", stderr);
 
 	vfprintf(stderr, msg, args);
 	fputc(10, stderr);
