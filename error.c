@@ -1,5 +1,6 @@
 #include "error.h"
 #include <stdio.h>
+#include <ctype.h>
 #include <stdlib.h>
 #include <stdarg.h>
 
@@ -31,4 +32,22 @@ void error_check_ptr (const void *const p)
 {
 	if (p) return;
 	error_bad_use("out of memory");
+}
+
+void error_at_lexer (const char *const fmt, char *err, const unsigned short line, const unsigned short pos, ...)
+{
+	fprintf(stderr, "\t[s4tb:error]: error at lexing at (%d: %d)\n\t\x1b[5;31m", line, pos);
+	do {
+		fputc(*err, stderr);
+		if (isspace(*err)) fprintf(stderr, "\x1b[0m");
+	} while (*err++ != '\n');
+
+	fputc('\t', stderr);
+
+	va_list args;
+	va_start(args, pos);
+	vfprintf(stderr, fmt, args);
+
+	fputc('\n', stderr);
+	exit(EXIT_FAILURE);
 }
