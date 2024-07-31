@@ -19,27 +19,37 @@ enum TokenType {
 	t_type_mul_sign		= '*',
 	t_type_expressions	= '=',
 	t_type_reference	= '@',
-
 	t_type_space		= 128,
 	t_type_number		= 129,
 	t_type_unknown		= 130,
+};
+
+enum CellType {
+	c_type_unsolved		= 0,
+
+	c_type_number		= 10,
+	c_type_string		= 11
 };
 
 struct Cell;
 
 union Value {
 	struct Cell	*reference;
-	long double	number;
+	struct		{ long double value; unsigned short width; } number;
 	struct 		{ char *src; unsigned short len; } text;
 };
 
 struct Token {
 	union Value		as;
 	enum TokenType	type;
+	unsigned short	number_width;
 };
 
 struct Cell {
+	union Value		as;
 	unsigned short	exprsz;
+	unsigned short	width;
+	enum CellType	type;
 };
 
 struct SLexer {
@@ -58,6 +68,7 @@ struct Sheet {
 	unsigned int	gridsize;
 	unsigned short	columns;
 	unsigned short	rows;
+	unsigned short	cell_width;
 };
 
 #endif

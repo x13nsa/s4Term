@@ -37,6 +37,7 @@ void error_check_ptr (const void *const p)
 void error_at_lexer (const char *const fmt, char *err, const unsigned short line, const unsigned short pos, ...)
 {
 	fprintf(stderr, "\t[s4tb:error]: error at lexing at (%d: %d)\n\t\x1b[5;31m", line, pos);
+
 	do {
 		fputc(*err, stderr);
 		if (isspace(*err)) fprintf(stderr, "\x1b[0m");

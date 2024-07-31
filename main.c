@@ -8,6 +8,13 @@
 #include <stdlib.h>
 #include <limits.h>
 
+#define	MAX_OF(a, b)		((a) > (b) ? (a) : (b))
+
+struct CellError {
+	char	*err;
+	size_t	len;
+};
+
 static void read_sheet (const char *const, struct SLexer *const);
 static void det_table_sz (struct Sheet *const);
 
@@ -18,6 +25,10 @@ static void get_number_token (struct SLexer *const, struct Token *const);
 static void get_string_token (struct SLexer *const, struct Token *const);
 
 static unsigned int get_reference_token (struct SLexer *const, const unsigned int, const unsigned short);
+static void solve_fucking_cell (struct Sheet *const, struct Cell *const, struct Token *const);
+
+static void set_error_on_cell (struct Cell *const, const enum CellType);
+static void print_sheet (const struct Sheet *const);
 
 int main (int argc, char **argv)
 {
@@ -42,9 +53,11 @@ int main (int argc, char **argv)
 
 	sheet.gridsize = sheet.columns * sheet.rows;
 	sheet.grid = (struct Cell*) calloc(sheet.gridsize, sizeof(struct Cell));
-	error_check_ptr(sheet.grid);
 
+	error_check_ptr(sheet.grid);
 	collect_cells(&sheet);
+
+	print_sheet(&sheet);
 	return 0;
 }
 
@@ -81,7 +94,7 @@ static void det_table_sz (struct Sheet *const sheet)
 		if (c == '|')
 			sheet->columns++;
 		else if (c == '\n') {
-			maxncols = (maxncols > sheet->columns) ? maxncols : sheet->columns;
+			maxncols = MAX_OF(maxncols, sheet->columns);
 			sheet->rows++;
 			sheet->columns = 0;
 		}
@@ -103,6 +116,9 @@ static void collect_cells (struct Sheet *const sheet)
 	while (lex->cpos < lex->t_bytes) {
 		this_token->type = find_out_type(lex);
 
+		if (this_cell->exprsz == TOKENSTREAM_SIZE)
+			error_at_lexer("maximum number of tokens per cell reached: %d", lex->content + lex->cpos, lex->nline, lex->loff, TOKENSTREAM_SIZE);
+
 		switch (this_token->type) {
 			case t_type_space: continue;
 
@@ -113,41 +129,39 @@ static void collect_cells (struct Sheet *const sheet)
 			}
 
 			case t_type_newline: {
-				this_cell  = &sheet->grid[++lex->nline * sheet->columns];
+				this_cell  = &sheet->grid[lex->nline++ * sheet->columns];
 				this_token = &thisexpr[0];
 				lex->loff  = 0;
 				continue;
 			}
 
 			case t_type_cell: {
+				solve_fucking_cell(sheet, this_cell, thisexpr);
+				this_token = &thisexpr[0];
 				this_cell++;
-				break;
+				continue;
 			}
 
 			case t_type_number: {
 				get_number_token(lex, this_token);
-				printf("token: <%Lf>\n", this_token->as.number);
 				break;
 			}
 
-
 			case t_type_string: {
 				get_string_token(lex, this_token);
-				printf("token: <%.*s>\n", this_token->as.text.len, this_token->as.text.src);
 				break;
 			}
 
 			case t_type_reference: {
 				const unsigned int pos = get_reference_token(lex, sheet->gridsize, sheet->columns);
 				this_token->as.reference = &sheet->grid[pos];
-				printf("token: <POS=%d>\n", pos);
 				break;
 			}
 
-
-			case t_type_command:
+			case t_type_command: {
 				MARK_TODO("commands");
 				break;
+			}
 		}
 
 		this_cell->exprsz++;
@@ -179,17 +193,18 @@ static enum TokenType find_out_type (struct SLexer *const slex)
 
 static void get_number_token (struct SLexer *const slex, struct Token *const token)
 {
-	char *off = slex->content + slex->cpos - 1;
+	char *off = slex->content + slex->cpos - 1, *ends;
+	long double *number = &token->as.number.value;
 
-	char *ends;
-	token->as.number = strtold(off, &ends);
+	*number = strtold(off, &ends);
 
-	if ((token->as.number >= LLONG_MAX) || (token->as.number <= LLONG_MIN))
+	if ((*number >= LLONG_MAX) || (*number <= LLONG_MIN))
 		error_at_lexer("number overflow", off, slex->nline, --slex->loff);
 
 	const size_t inc = ends - off - 1;
 	slex->cpos += inc;
 	slex->loff += inc;
+	token->as.number.width = (unsigned short) inc + 1;
 }
 
 static void get_string_token (struct SLexer *const slex, struct Token *const token)
@@ -239,4 +254,57 @@ static unsigned int get_reference_token (struct SLexer *const slex, const unsign
 	}
 }
 
+static void solve_fucking_cell (struct Sheet *const sheet, struct Cell *const cell, struct Token *const stream)
+{
+	if (cell->exprsz == 0) {
+		set_error_on_cell(cell, c_type_unsolved);
+		return;
+	}
 
+	switch (stream[0].type) {
+		case t_type_number: {
+			cell->as.number = stream[0].as.number;
+			cell->width     = stream[0].as.number.width;
+			cell->type      = c_type_number;
+			break;
+		}
+
+		case t_type_string: {
+			cell->as.text.src = stream[0].as.text.src;
+			cell->as.text.len = stream[0].as.text.len;
+			cell->type        = c_type_string;
+			cell->width       = cell->as.text.len;
+			break;
+		}
+	}
+
+	sheet->cell_width = MAX_OF(sheet->cell_width, cell->width);
+}
+
+static void set_error_on_cell (struct Cell *const cell, const enum CellType wh)
+{
+	static const struct CellError errors[] = {
+		{"![empty]", 8}
+	};
+
+	cell->as.text.src = errors[wh].err;
+	cell->as.text.len = errors[wh].len;
+	cell->type = wh;
+}
+
+static void print_sheet (const struct Sheet *const sheet)
+{
+	for (unsigned short row = 0; row < sheet->rows; row++) {
+		for (unsigned short col = 0; col < sheet->columns; col++) {
+			struct Cell *t = &sheet->grid[row * sheet->columns + col];
+
+			if (t->type == c_type_number)
+				printf("%-*Lf ", sheet->cell_width, t->as.number.value);
+			if (t->type == c_type_string)
+				printf("%-*.*s ", sheet->cell_width, t->as.text.len, t->as.text.src);
+			if (t->type == c_type_unsolved)
+				printf("%*s", sheet->cell_width + 1, " ");
+		}
+		putchar(10);
+	}
+}
