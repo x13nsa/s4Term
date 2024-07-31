@@ -1,15 +1,23 @@
 #include "s4tb.h"
 #include "error.h"
+#include <math.h>
 #include <ctype.h>
+#include <errno.h>
 #include <getopt.h>
 #include <string.h>
 #include <stdlib.h>
+#include <limits.h>
 
 static void read_sheet (const char *const, struct SLexer *const);
 static void det_table_sz (struct Sheet *const);
 
 static void collect_cells (struct Sheet *const);
 static enum TokenType find_out_type (struct SLexer *const);
+
+static void get_number_token (struct SLexer *const, struct Token *const);
+static void get_string_token (struct SLexer *const, struct Token *const);
+
+static unsigned int get_reference_token (struct SLexer *const, const unsigned int, const unsigned short);
 
 int main (int argc, char **argv)
 {
@@ -116,16 +124,29 @@ static void collect_cells (struct Sheet *const sheet)
 				break;
 			}
 
-			case t_type_number:
+			case t_type_number: {
+				get_number_token(lex, this_token);
+				printf("token: <%Lf>\n", this_token->as.number);
 				break;
+			}
 
-			case t_type_string:
-				break;
 
-			case t_type_reference:
+			case t_type_string: {
+				get_string_token(lex, this_token);
+				printf("token: <%.*s>\n", this_token->as.text.len, this_token->as.text.src);
 				break;
+			}
+
+			case t_type_reference: {
+				const unsigned int pos = get_reference_token(lex, sheet->gridsize, sheet->columns);
+				this_token->as.reference = &sheet->grid[pos];
+				printf("token: <POS=%d>\n", pos);
+				break;
+			}
+
 
 			case t_type_command:
+				MARK_TODO("commands");
 				break;
 		}
 
@@ -136,7 +157,9 @@ static void collect_cells (struct Sheet *const sheet)
 
 static enum TokenType find_out_type (struct SLexer *const slex)
 {
+	slex->loff++;
 	const char a = slex->content[slex->cpos++];
+
 	switch (a) {
 		case '|': case '"': case ':':
 		case '(': case ')': case '+':
@@ -153,3 +176,67 @@ static enum TokenType find_out_type (struct SLexer *const slex)
 
 	return isdigit(a) ? t_type_number : t_type_unknown;
 }
+
+static void get_number_token (struct SLexer *const slex, struct Token *const token)
+{
+	char *off = slex->content + slex->cpos - 1;
+
+	char *ends;
+	token->as.number = strtold(off, &ends);
+
+	if ((token->as.number >= LLONG_MAX) || (token->as.number <= LLONG_MIN))
+		error_at_lexer("number overflow", off, slex->nline, --slex->loff);
+
+	const size_t inc = ends - off - 1;
+	slex->cpos += inc;
+	slex->loff += inc;
+}
+
+static void get_string_token (struct SLexer *const slex, struct Token *const token)
+{
+	token->as.text.src = slex->content + slex->cpos;
+	token->as.text.len = 0;
+
+	do {
+		token->as.text.len++;
+		slex->loff++;
+	} while (slex->content[slex->cpos++] != '"');
+
+	token->as.text.len--;
+}
+
+static unsigned int get_reference_token (struct SLexer *const slex, const unsigned int gsize, const unsigned short columns)
+{
+	char *start = slex->content + slex->cpos - 1;
+	const unsigned short off = slex->loff;
+
+	if (!isalpha(slex->content[slex->cpos])) goto bad_ref;
+	unsigned short col = 0, depth = 0;
+
+	do {
+		col += (depth++ * 26) + (tolower(slex->content[slex->cpos++]) - 'a');
+		slex->loff++;
+	} while (isalpha(slex->content[slex->cpos]));
+
+	if (!isdigit(slex->content[slex->cpos])) goto bad_ref;
+
+	char *ends;
+	unsigned int pos = col + (columns * ((unsigned short) strtold(slex->content + slex->cpos, &ends)));
+
+	if (pos >= UINT_MAX) goto bad_ref;
+	if (pos >= gsize) error_at_lexer("reference outta bounds", start, slex->nline, off);
+
+	const size_t inc = ends - (slex->content + slex->cpos);
+	slex->loff += inc;
+	slex->cpos += inc;
+
+	return pos;
+
+	bad_ref:
+	{
+		error_at_lexer("malformed reference", start, slex->nline, off);
+		return 0;
+	}
+}
+
+

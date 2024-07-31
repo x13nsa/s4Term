@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 #define	TOKENSTREAM_SIZE	64
+#define	MARK_TODO(s)		printf("TODO: %s (%s: %d)", s, __FILE__, __LINE__);
 
 enum TokenType {
 	t_type_cell			= '|',
@@ -24,7 +25,16 @@ enum TokenType {
 	t_type_unknown		= 130,
 };
 
+struct Cell;
+
+union Value {
+	struct Cell	*reference;
+	long double	number;
+	struct 		{ char *src; unsigned short len; } text;
+};
+
 struct Token {
+	union Value		as;
 	enum TokenType	type;
 };
 
