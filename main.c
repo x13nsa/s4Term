@@ -35,7 +35,7 @@ int main (int argc, char **argv)
 	if (argc == 1) error_print_usage();
 
 	opterr = 0;
-	signed int op;
+	int op;
 
 	struct Sheet sheet;
 	memset(&sheet, 0, sizeof(struct Sheet));
@@ -123,8 +123,8 @@ static void collect_cells (struct Sheet *const sheet)
 			case t_type_space: continue;
 
 			case t_type_unknown: {
-				char *offset = lex->content + lex->cpos - 1;
-				error_at_lexer("unknown token", offset, lex->nline, lex->cpos - 1);
+				char *offset = lex->content + (--lex->cpos);
+				error_at_lexer("unknown token", offset, lex->nline, lex->cpos);
 				break;
 			}
 
@@ -213,6 +213,9 @@ static void get_string_token (struct SLexer *const slex, struct Token *const tok
 	token->as.text.len = 0;
 
 	do {
+		if (slex->content[slex->cpos] == '\n')
+			error_at_lexer("invalid string", --token->as.text.src, slex->nline, slex->loff);
+
 		token->as.text.len++;
 		slex->loff++;
 	} while (slex->content[slex->cpos++] != '"');
@@ -276,6 +279,13 @@ static void solve_fucking_cell (struct Sheet *const sheet, struct Cell *const ce
 			cell->width       = cell->as.text.len;
 			break;
 		}
+		case t_type_expressions: {
+			break;
+		}
+		default: {
+			set_error_on_cell(cell, c_type_unknonwn_op);
+			break;
+		}
 	}
 
 	sheet->cell_width = MAX_OF(sheet->cell_width, cell->width);
@@ -284,27 +294,36 @@ static void solve_fucking_cell (struct Sheet *const sheet, struct Cell *const ce
 static void set_error_on_cell (struct Cell *const cell, const enum CellType wh)
 {
 	static const struct CellError errors[] = {
-		{"![empty]", 8}
+		{NULL, 0},
+		{"![unknonwn-op]", 14}
 	};
 
 	cell->as.text.src = errors[wh].err;
 	cell->as.text.len = errors[wh].len;
+	cell->width       = errors[wh].len;
 	cell->type = wh;
 }
 
 static void print_sheet (const struct Sheet *const sheet)
 {
+	FILE *outw = stdout;
+	if (sheet->filename_out)
+		outw = fopen(sheet->filename_out, "a+");
+
 	for (unsigned short row = 0; row < sheet->rows; row++) {
+		fprintf(outw, "\n\t| ");
+
 		for (unsigned short col = 0; col < sheet->columns; col++) {
 			struct Cell *t = &sheet->grid[row * sheet->columns + col];
 
 			if (t->type == c_type_number)
-				printf("%-*Lf ", sheet->cell_width, t->as.number.value);
-			if (t->type == c_type_string)
-				printf("%-*.*s ", sheet->cell_width, t->as.text.len, t->as.text.src);
-			if (t->type == c_type_unsolved)
-				printf("%*s", sheet->cell_width + 1, " ");
+				fprintf(outw, "%-*Lf  | ", sheet->cell_width, t->as.number.value);
+			else if (t->type == c_type_unsolved)
+				fprintf(outw, "%*s| ", sheet->cell_width + 2, " ");
+			else
+				fprintf(outw, "%-*.*s  | ", sheet->cell_width, t->as.text.len, t->as.text.src);
 		}
-		putchar(10);
 	}
+
+	fprintf(outw, "\n\n");
 }

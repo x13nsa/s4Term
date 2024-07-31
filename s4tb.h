@@ -26,6 +26,7 @@ enum TokenType {
 
 enum CellType {
 	c_type_unsolved		= 0,
+	c_type_unknonwn_op	= 1,
 
 	c_type_number		= 10,
 	c_type_string		= 11
