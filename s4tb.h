@@ -4,7 +4,7 @@
 #include <stdbool.h>
 
 #define	TOKENSTREAM_SIZE	64
-#define	CELLS_ERROR(a)		(((a) >= c_type_unknonwn_op) && ((a) <= c_type_div_by_zero))
+#define	CELLS_ERROR(a)		(((a) >= c_type_unknonwn_op) && ((a) <= c_type_illegal_val))
 #define	MARK_TODO(s)		printf("TODO: %s (%s: %d)", s, __FILE__, __LINE__);
 
 enum TokenType {
@@ -20,6 +20,7 @@ enum TokenType {
 	t_type_mul_sign		= '*',
 	t_type_expressions	= '=',
 	t_type_reference	= '@',
+	t_type_clone_up		= '^',
 	t_type_space		= 128,
 	t_type_number		= 129,
 	t_type_unknown		= 130,
@@ -33,6 +34,7 @@ enum CellType {
 	c_type_bad_expr		= 4,
 	c_type_expr_ovrflow	= 5,
 	c_type_div_by_zero	= 6,
+	c_type_illegal_val	= 7,
 
 	c_type_number		= 10,
 	c_type_string		= 11,

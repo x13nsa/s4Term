@@ -294,7 +294,6 @@ static void solve_fucking_cell (struct Sheet *const sheet, struct Cell *const ce
 				set_error_on_cell(cell, ret);
 				break;
 			}
-			cell->type = c_type_number;
 			break;
 		}
 		default: {
@@ -314,7 +313,9 @@ static void set_error_on_cell (struct Cell *const cell, const enum CellType wh)
 		{"![further-clone]",	16},
 		{"![self-reference]",	17},
 		{"![malformed-expr]",	17},
-		{"![expr-overflow]",	16}
+		{"![expr-overflow]",	16},
+		{"![division-by-0]",	16},
+		{"![illegal-ref]",		14}
 	};
 
 	cell->as.text.src = errors[wh].err;

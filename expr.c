@@ -16,7 +16,7 @@ struct Formula {
 	unsigned short	npars;
 };
 
-static enum CellType push_at_beginning (struct Formula *const, struct Token *const);
+static enum CellType push_at_beginning (struct Formula *const, const long double, const enum TokenType);
 static enum CellType push_at_end (struct Formula *const, struct Token *const);
 
 static bool pop_top_operator (const enum TokenType, const enum TokenType);
@@ -37,34 +37,48 @@ enum CellType expr_solve_expression (struct Cell *const cell, struct Token *stre
 	stream++;
 
 	for (unsigned short i = 1; i < (cell->exprsz) && !CELLS_ERROR(status); i++) {
-		switch (stream->type) {
-			case t_type_number:
-				status = push_at_beginning(&fx, stream);
-				break;
 
-			case t_type_reference:
+
+
+		switch (stream->type) {
+			case t_type_number: {
+				status = push_at_beginning(&fx, stream->as.number.value, t_type_number);
 				break;
+			}
+
+			case t_type_reference: {
+				struct Cell *ref = stream->as.reference;
+
+				if (ref >  cell) 				return c_type_further_cln;
+				if (ref == cell)				return c_type_self_ref;
+				if (ref->type != c_type_number)	return c_type_illegal_val;
+
+				status = push_at_beginning(&fx, ref->as.number.value, t_type_number);
+				break;
+			}
 
 			case t_type_add_sign:
 			case t_type_sub_sign:
 			case t_type_mul_sign:
 			case t_type_div_sign:
 			case t_type_left_par:
-			case t_type_right_par:
+			case t_type_right_par: {
 				status = push_at_end(&fx, stream);
 				break;
+			}
 
 			default:
 				return c_type_bad_expr;
 		}
 
+		cell->type = c_type_number;
 		stream++;
 	}
 
-	return solve(&fx);
+	return (CELLS_ERROR(status)) ? status :solve(&fx);
 }
 
-static enum CellType push_at_beginning (struct Formula *const fx, struct Token *const t)
+static enum CellType push_at_beginning (struct Formula *const fx, const long double n, const enum TokenType t)
 {
 	/* +----------------------------------------+
 	 * +   OPERANDS         |   OPERATORS       +  } fx->output
@@ -80,7 +94,13 @@ static enum CellType push_at_beginning (struct Formula *const fx, struct Token *
 	if (fx->beg_i == HALF_CONTAINTER_SZ)
 		return c_type_expr_ovrflow;
 
-	memcpy(&fx->output[fx->beg_i++], t, sizeof(struct Token));
+	struct Token *this = &fx->output[fx->beg_i++];
+	this->type = t;
+
+	if (t == t_type_number) {
+		this->as.number.value = n;
+	}
+
 	return c_type_number;
 }
 
@@ -92,7 +112,10 @@ static enum CellType push_at_end (struct Formula *const fx, struct Token *const 
 	enum CellType status = c_type_number;
 
 	if ((fx->end_i == HALF_CONTAINTER_SZ) || (t->type == t_type_left_par)) goto push;
-	if (t->type == t_type_right_par) return right_par_found(fx);
+	if (t->type == t_type_right_par) {
+		status = right_par_found(fx);
+		return status;
+	}
 
 	do {
 		struct Token *top = &fx->output[--fx->end_i];
@@ -101,7 +124,7 @@ static enum CellType push_at_end (struct Formula *const fx, struct Token *const 
 			break;
 		}
 
-		status = push_at_beginning(fx, top);
+		status = push_at_beginning(fx, 0, top->type);
 	} while (!CELLS_ERROR(status) && (fx->end_i > HALF_CONTAINTER_SZ));
 
 	push:
@@ -139,7 +162,7 @@ static enum CellType right_par_found (struct Formula *const fx)
 
 	while (fx->output[fx->end_i].type != t_type_left_par && !CELLS_ERROR(status)) {
 		struct Token *top = &fx->output[fx->end_i--];
-		status = push_at_beginning(fx, top);
+		status = push_at_beginning(fx, 0, top->type);
 	}
 
 	fx->npars--;
@@ -150,7 +173,7 @@ static enum CellType solve (struct Formula *const fx)
 {
 	enum CellType status = c_type_number;
 	for (unsigned short k = --fx->end_i; (k >= HALF_CONTAINTER_SZ) && !CELLS_ERROR(status); k--)
-		status = push_at_beginning(fx, &fx->output[k]);
+		status = push_at_beginning(fx, 0, fx->output[k].type);
 
 	long double numstack[MAX_NUMSTACK_SZ] = {0};
 	unsigned short nums_i = 0;
