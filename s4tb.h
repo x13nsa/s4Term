@@ -59,6 +59,7 @@ struct Cell {
 	unsigned short	exprsz;
 	unsigned short	width;
 	enum CellType	type;
+	bool 			is_expression;
 };
 
 struct SLexer {

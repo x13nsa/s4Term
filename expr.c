@@ -37,9 +37,6 @@ enum CellType expr_solve_expression (struct Cell *const cell, struct Token *stre
 	stream++;
 
 	for (unsigned short i = 1; i < (cell->exprsz) && !CELLS_ERROR(status); i++) {
-
-
-
 		switch (stream->type) {
 			case t_type_number: {
 				status = push_at_beginning(&fx, stream->as.number.value, t_type_number);
@@ -75,7 +72,11 @@ enum CellType expr_solve_expression (struct Cell *const cell, struct Token *stre
 		stream++;
 	}
 
-	return (CELLS_ERROR(status)) ? status :solve(&fx);
+	/*
+	 * TODO: clone the final ouput to the expression of the current cell.
+	 */
+
+	return CELLS_ERROR(status) ? status : solve(&fx);
 }
 
 static enum CellType push_at_beginning (struct Formula *const fx, const long double n, const enum TokenType t)

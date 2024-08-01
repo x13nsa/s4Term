@@ -180,7 +180,7 @@ static enum TokenType find_out_type (struct SLexer *const slex)
 		case '|': case '"': case ':':
 		case '(': case ')': case '+':
 		case '/': case '*': case '=':
-		case '@': case '\n': return a;
+		case '@': case '\n': case '^': return a;
 	}
 
 	if (isspace(a))
@@ -288,12 +288,13 @@ static void solve_fucking_cell (struct Sheet *const sheet, struct Cell *const ce
 			memcpy(cell, ref, sizeof(struct Cell));
 			break;
 		}
-		case t_type_expressions: {
+		case t_type_clone_up: case t_type_expressions: {
 			const enum CellType ret = expr_solve_expression(cell, stream);
 			if (CELLS_ERROR(ret)) {
 				set_error_on_cell(cell, ret);
 				break;
 			}
+			cell->is_expression = true;
 			break;
 		}
 		default: {
