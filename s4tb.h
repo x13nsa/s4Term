@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 #define	TOKENSTREAM_SIZE	64
+#define	CELLS_ERROR(a)		(((a) >= c_type_unknonwn_op) && ((a) <= c_type_div_by_zero))
 #define	MARK_TODO(s)		printf("TODO: %s (%s: %d)", s, __FILE__, __LINE__);
 
 enum TokenType {
@@ -27,9 +28,14 @@ enum TokenType {
 enum CellType {
 	c_type_unsolved		= 0,
 	c_type_unknonwn_op	= 1,
+	c_type_further_cln	= 2,
+	c_type_self_ref		= 3,
+	c_type_bad_expr		= 4,
+	c_type_expr_ovrflow	= 5,
+	c_type_div_by_zero	= 6,
 
 	c_type_number		= 10,
-	c_type_string		= 11
+	c_type_string		= 11,
 };
 
 struct Cell;
@@ -70,6 +76,7 @@ struct Sheet {
 	unsigned short	columns;
 	unsigned short	rows;
 	unsigned short	cell_width;
+	unsigned short	dprecision;
 };
 
 #endif

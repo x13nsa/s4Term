@@ -1,5 +1,6 @@
 #include "s4tb.h"
 #include "error.h"
+#include "expr.h"
 #include <math.h>
 #include <ctype.h>
 #include <errno.h>
@@ -40,10 +41,11 @@ int main (int argc, char **argv)
 	struct Sheet sheet;
 	memset(&sheet, 0, sizeof(struct Sheet));
 
-	while ((op = getopt(argc, argv, ":s:o:h")) != -1) {
+	while ((op = getopt(argc, argv, ":s:o:p:h")) != -1) {
 		switch (op) {
 			case 's': sheet.filename_in  = optarg; break;
 			case 'o': sheet.filename_out = optarg; break;
+			case 'p': sheet.dprecision   = atoi(optarg); break;
 			default: error_print_usage();
 		}
 	}
@@ -271,7 +273,6 @@ static void solve_fucking_cell (struct Sheet *const sheet, struct Cell *const ce
 			cell->type      = c_type_number;
 			break;
 		}
-
 		case t_type_string: {
 			cell->as.text.src = stream[0].as.text.src;
 			cell->as.text.len = stream[0].as.text.len;
@@ -279,7 +280,21 @@ static void solve_fucking_cell (struct Sheet *const sheet, struct Cell *const ce
 			cell->width       = cell->as.text.len;
 			break;
 		}
+		case t_type_reference: {
+			const struct Cell *const ref = stream[0].as.reference;
+			if (ref >  cell) { set_error_on_cell(cell, c_type_further_cln); break; }
+			if (ref == cell) { set_error_on_cell(cell, c_type_self_ref); break; }
+
+			memcpy(cell, ref, sizeof(struct Cell));
+			break;
+		}
 		case t_type_expressions: {
+			const enum CellType ret = expr_solve_expression(cell, stream);
+			if (CELLS_ERROR(ret)) {
+				set_error_on_cell(cell, ret);
+				break;
+			}
+			cell->type = c_type_number;
 			break;
 		}
 		default: {
@@ -295,7 +310,11 @@ static void set_error_on_cell (struct Cell *const cell, const enum CellType wh)
 {
 	static const struct CellError errors[] = {
 		{NULL, 0},
-		{"![unknonwn-op]", 14}
+		{"![unknonwn-op]",		14},
+		{"![further-clone]",	16},
+		{"![self-reference]",	17},
+		{"![malformed-expr]",	17},
+		{"![expr-overflow]",	16}
 	};
 
 	cell->as.text.src = errors[wh].err;

@@ -10,6 +10,7 @@ void error_print_usage (void)
 			            "\tusage: s4tb [-s sheet] [arguments]\n"
 						"\targuments:\n"
 						"\t  -o <*>         display output in * (stdout by default)\n"
+						"\t  -p <*>         decimal precision\n"
 						"\t  -h             display this message\n";
 
 	fprintf(stderr, usage, __DATE__, __TIME__);

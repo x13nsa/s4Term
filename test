@@ -1,5 +1,6 @@
-34 		|  -				| "hola"		|
-"hola"	| "this is a text" 	| "one more"	|
--343	| -345432.34		| "todo bien?"	|
-34 		|					| "hola"		|
-=3+4	|
+=4+1			|  -				| @a3			|
+"hola"			| "this is a text" 	| "one more"	|
+-343			| -345432.34		| "todo bien?"	|
+34 				|	@a0				| @c3			|
+=4+5*3			| =1/3				| =(3 + 4) / 12	|
+=4+(3 - 2/1)	|

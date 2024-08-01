@@ -1,4 +1,4 @@
-objs  = main.o error.o
+objs  = main.o error.o expr.o
 std   = -std=c99
 avoid = -Wno-switch
 optmz = -O0
@@ -12,5 +12,5 @@ $(exec): $(objs)
 %.o: %.c
 	gcc	-c $@ $< $(flags)
 clean:
-	rm	-r $(objs) $(exec)
+	rm	-f $(objs) $(exec)
 
