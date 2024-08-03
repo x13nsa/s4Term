@@ -35,6 +35,7 @@ enum CellType {
 	c_type_expr_ovrflow	= 5,
 	c_type_div_by_zero	= 6,
 	c_type_illegal_val	= 7,
+	c_type_bad_clone	= 8,
 
 	c_type_number		= 10,
 	c_type_string		= 11,
@@ -55,6 +56,7 @@ struct Token {
 };
 
 struct Cell {
+	struct Token	*expr;
 	union Value		as;
 	unsigned short	exprsz;
 	unsigned short	width;

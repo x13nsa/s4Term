@@ -261,6 +261,7 @@ static unsigned int get_reference_token (struct SLexer *const slex, const unsign
 
 static void solve_fucking_cell (struct Sheet *const sheet, struct Cell *const cell, struct Token *const stream)
 {
+
 	if (cell->exprsz == 0) {
 		set_error_on_cell(cell, c_type_unsolved);
 		return;
@@ -288,13 +289,23 @@ static void solve_fucking_cell (struct Sheet *const sheet, struct Cell *const ce
 			memcpy(cell, ref, sizeof(struct Cell));
 			break;
 		}
-		case t_type_clone_up: case t_type_expressions: {
-			const enum CellType ret = expr_solve_expression(cell, stream);
-			if (CELLS_ERROR(ret)) {
-				set_error_on_cell(cell, ret);
+		case t_type_expressions: {
+			cell->type = expr_solve_expression(cell, stream);
+			if (CELLS_ERROR(cell->type)) {
+				set_error_on_cell(cell, cell->type);
 				break;
 			}
 			cell->is_expression = true;
+			break;
+		}
+		case t_type_clone_up: {
+			const size_t row1th = sheet->columns * sizeof(struct Cell) + (size_t) &sheet->grid[0];
+			if ((size_t) cell < row1th) {
+				set_error_on_cell(cell, c_type_bad_clone);
+				break;
+			}
+
+			expr_solve_cloning(cell, sheet->columns);
 			break;
 		}
 		default: {
@@ -316,7 +327,8 @@ static void set_error_on_cell (struct Cell *const cell, const enum CellType wh)
 		{"![malformed-expr]",	17},
 		{"![expr-overflow]",	16},
 		{"![division-by-0]",	16},
-		{"![illegal-ref]",		14}
+		{"![illegal-ref]",		14},
+		{"![nothing-2-clone]",	18}
 	};
 
 	cell->as.text.src = errors[wh].err;

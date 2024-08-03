@@ -1,6 +1,22 @@
 #include "expr.h"
+#include "error.h"
 #include <string.h>
 #include <stdlib.h>
+
+
+
+
+
+
+
+
+
+
+
+#include <err.h>
+
+
+
 
 #define	HALF_CONTAINTER_SZ	TOKENSTREAM_SIZE / 2
 #define	MAX_NUMSTACK_SZ		16
@@ -72,11 +88,35 @@ enum CellType expr_solve_expression (struct Cell *const cell, struct Token *stre
 		stream++;
 	}
 
-	/*
-	 * TODO: clone the final ouput to the expression of the current cell.
-	 */
+	if (CELLS_ERROR(status))
+		return status;
 
-	return CELLS_ERROR(status) ? status : solve(&fx);
+	status = solve(&fx);
+	if (CELLS_ERROR(status))
+		return status;
+
+	cell->expr   = (struct Token*) calloc(fx.beg_i, sizeof(struct Token));
+	cell->exprsz = fx.beg_i;
+
+	error_check_ptr(cell->expr);
+	memcpy(cell->expr, fx.output, fx.beg_i * sizeof(struct Token));
+	return status;
+}
+
+void expr_solve_cloning (struct Cell *const cell, const unsigned short columns)
+{
+	const struct Cell *const clone_to = (struct Cell*) ((size_t) cell - columns * sizeof(struct Cell));
+
+	if (!clone_to->is_expression) {
+		memcpy(cell, clone_to, sizeof(struct Cell));
+		return;
+	}
+
+	const struct Token *const expr = clone_to->expr;
+	for (unsigned short i = 0; i < clone_to->exprsz; i++) {
+		if (expr[i].type == t_type_reference)
+			errx(1, "ok");
+	}
 }
 
 static enum CellType push_at_beginning (struct Formula *const fx, const long double n, const enum TokenType t)
