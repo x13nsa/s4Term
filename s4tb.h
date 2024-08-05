@@ -1,87 +1,61 @@
 #ifndef S4TB_S4TB_H
 #define S4TB_S4TB_H
-#include <stdio.h>
-#include <stdbool.h>
+#include <stdint.h>
+#include <stdlib.h>
 
-#define	TOKENSTREAM_SIZE	64
-#define	CELLS_ERROR(a)		(((a) >= c_type_unknonwn_op) && ((a) <= c_type_illegal_val))
-#define	MARK_TODO(s)		printf("TODO: %s (%s: %d)", s, __FILE__, __LINE__);
+#define	MAX_TOKEN_PER_CELL	64
+#define	CHECK_PTR(a)		do { if (a) break; errx(EXIT_FAILURE, "[error]: cannot continue"); } while (0)
 
 enum TokenType {
-	t_type_cell			= '|',
-	t_type_string		= '"',
-	t_type_command		= ':',
-	t_type_newline		= '\n',
-	t_type_left_par		= '(',
-	t_type_right_par	= ')',
-	t_type_add_sign		= '+',
-	t_type_sub_sign		= '-',
-	t_type_div_sign		= '/',
-	t_type_mul_sign		= '*',
-	t_type_expressions	= '=',
-	t_type_reference	= '@',
-	t_type_clone_up		= '^',
-	t_type_space		= 128,
-	t_type_number		= 129,
-	t_type_unknown		= 130,
-};
+	t_type_next_row = '\n',
+	t_type_next_col	= '|',
+	t_type_referenz = '@',
+	t_type_string   = '"',
+	t_type_clone	= '^',
+	t_type_exprssn	= '=',
+	t_type_add_sign	= '+',
+	t_type_sub_sign	= '-',
+	t_type_mul_sign	= '*',
+	t_type_div_sign	= '/',
+	t_type_L_par	= '(',
+	t_type_R_par	= ')',
 
-enum CellType {
-	c_type_unsolved		= 0,
-	c_type_unknonwn_op	= 1,
-	c_type_further_cln	= 2,
-	c_type_self_ref		= 3,
-	c_type_bad_expr		= 4,
-	c_type_expr_ovrflow	= 5,
-	c_type_div_by_zero	= 6,
-	c_type_illegal_val	= 7,
-	c_type_bad_clone	= 8,
-
-	c_type_number		= 10,
-	c_type_string		= 11,
+	t_type_dec_num	= 129,
+	t_type_unknown	= 130,
+	t_type_space	= 131
 };
 
 struct Cell;
 
 union Value {
-	struct Cell	*reference;
-	struct		{ long double value; unsigned short width; } number;
-	struct 		{ char *src; unsigned short len; } text;
+	struct	{ long double val; uint16_t width; } num;
+	struct	{ char *src; uint16_t len; } str;
+	struct	Cell *ref;
 };
 
 struct Token {
 	union Value		as;
 	enum TokenType	type;
-	unsigned short	number_width;
 };
 
 struct Cell {
-	struct Token	*expr;
-	union Value		as;
-	unsigned short	exprsz;
-	unsigned short	width;
-	enum CellType	type;
-	bool 			is_expression;
+	union Value	as;
+	uint16_t	exprsz, width;
 };
 
-struct SLexer {
-	char			*content;
-	size_t			t_bytes;
-	size_t			cpos;
-	unsigned short	nline;
-	unsigned short	loff;
+struct Lexer {
+	char		*content;
+	size_t		pos, bytes;
+	uint16_t	loff, row;
 };
 
-struct Sheet {
-	struct SLexer	slexer;
+struct Program {
+	struct Lexer	lex;
 	struct Cell		*grid;
-	char			*filename_in;
-	char			*filename_out;
-	unsigned int	gridsize;
-	unsigned short	columns;
-	unsigned short	rows;
-	unsigned short	cell_width;
-	unsigned short	dprecision;
+	char			*in_filename, *out_filename;
+	uint32_t		grid_size;
+	uint16_t		rows, columns;
+	uint8_t			precision;
 };
 
 #endif
