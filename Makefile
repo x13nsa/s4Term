@@ -1,8 +1,9 @@
-objs  = s4tb.o error.o
-opt   = -O0
+objs  = s4t-b.o
+optmz = -O0
 std   = -std=c99
-flags = -Wall -Wextra -Wpedantic $(opt) $(std) -Wno-switch
-exec  = s4tb
+wNos  = -Wno-switch
+flags = -Wall -Wextra -Wpedantic $(optmz) $(std) $(wNos)
+exec  = s4t-b
 
 all: $(exec)
 
@@ -11,4 +12,4 @@ $(exec): $(objs)
 %.o: %.c
 	gcc	-c $@ $< $(flags)
 clean:
-	rm	-f $(objs) $(exec)
+	rm	-f $(exec) $(objs)
