@@ -11,7 +11,8 @@ enum LexErr {
 	lexerr_string_ovrflow	= 1,
 	lexerr_multiline_str	= 2,
 	lexerr_malformed_ref	= 3,
-	lexerr_ref_outtabnds	= 4
+	lexerr_ref_outtabnds	= 4,
+	lexerr_number_ovrflow	= 5,
 };
 
 static void print_usage (void);
@@ -25,6 +26,8 @@ static enum TokenClass initializate_token_if_any (struct Token *const, struct Sh
 
 static void init_token_as_string (struct Token *const, struct SheetLexer *const);
 static void init_token_as_reference (struct Token *const, struct SheetLexer *const, const struct SheetDimensions *const);
+
+static void init_token_as_number (struct Token *const, struct SheetLexer *const);
 
 static void fatal__ (const enum LexErr, const struct SheetLexer *const);
 
@@ -180,11 +183,20 @@ static enum TokenClass initializate_token_if_any (struct Token *const tok, struc
 	}
 
 	if (isspace(this)) return TClass_space;
-	if (isdigit(this)) return TClass_number;
+
+	bool isnumber = false;
+	if (isdigit(this)) isnumber = true;
 
 	const char next = slex->src[slex->at];
-	if (this == '-')
-		return isdigit(next) ? TClass_number : TClass_sub_sign;
+	if (this == '-') {
+		if (isdigit(next)) isnumber = true;
+		else return TClass_sub_sign;
+	}
+
+	if (isnumber) {
+		init_token_as_number(tok, slex);
+		return TClass_number;
+	}
 
 	fatal__(lexerr_unknown_token, slex);
 	return TClass_unknown;
@@ -228,7 +240,7 @@ static void init_token_as_reference (struct Token *const tok, struct SheetLexer 
 	if ((tok->as.ref.at = _row * sdim->columns + _col) >= sdim->total_of_cells)
 		fatal__(lexerr_ref_outtabnds, slex);
 
-	size_t diff = ends - (slex->src + slex->at);
+	const size_t diff = ends - (slex->src + slex->at);
 	slex->l_off += diff;
 	slex->at    += diff;
 
@@ -237,7 +249,19 @@ static void init_token_as_reference (struct Token *const tok, struct SheetLexer 
 
 static void init_token_as_number (struct Token *const tok, struct SheetLexer *const slex)
 {
+	long double *num = &tok->as.num.val;
+	char *ends, *bgns = slex->src + slex->at - 1;
 
+	*num = strtold(bgns, &ends);
+	if ((*num >= LLONG_MAX) || (*num <= LLONG_MIN))
+		fatal__(lexerr_number_ovrflow, slex);
+
+	const size_t inc = ends - bgns - 1;
+	slex->l_off += inc;
+	slex->at    += inc;
+	tok->as.num.width = 1 + inc;
+
+	printf("token: <%Lf: %d>\n", *num, tok->as.num.width);
 }
 
 static void fatal__ (const enum LexErr wh, const struct SheetLexer *const slex)
@@ -248,6 +272,7 @@ static void fatal__ (const enum LexErr wh, const struct SheetLexer *const slex)
 		"[fatal:%d:%d]: multi-line string is not allowed\n\x1b[5;31m%.*s\x1b[0m",
 		"[fatal:%d:%d]: malformed reference\n\x1b[5;31m%.*s\x1b[0m",
 		"[fatal:%d:%d]: reference outta bounds\n\x1b[5;31m%.*s\x1b[0m",
+		"[fatal:%d:%d]: number overflow\n\x1b[5;31m%.*s\x1b[0m",
 	};
 
 	char *bgns = slex->src + slex->at - 1;
