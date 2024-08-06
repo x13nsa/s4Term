@@ -13,6 +13,12 @@ enum LexErr {
 	lexerr_malformed_ref	= 3,
 	lexerr_ref_outtabnds	= 4,
 	lexerr_number_ovrflow	= 5,
+	lexerr_max_cap_reached	= 6
+};
+
+struct ErrorCell {
+	char	*error;
+	width_t	width;
 };
 
 static void print_usage (void);
@@ -28,8 +34,12 @@ static void init_token_as_string (struct Token *const, struct SheetLexer *const)
 static void init_token_as_reference (struct Token *const, struct SheetLexer *const, const struct SheetDimensions *const);
 
 static void init_token_as_number (struct Token *const, struct SheetLexer *const);
+static void solve_cell (struct Cell *const, struct Token *const, const width_t, width_t*);
 
 static void fatal__ (const enum LexErr, const struct SheetLexer *const);
+static void write_err_on_cell (const enum CellClass, struct Cell *const);
+
+static void display_table (const struct Program *const);
 
 int main (int argc, char **argv)
 {
@@ -52,7 +62,9 @@ int main (int argc, char **argv)
 	 * Clone operations (^) cannot be performed before this cell.
 	 */
 	P.sdim.toprightcell = &P.grid[P.sdim.rows - 1];
+
 	lex_tables_content(&P);
+	display_table(&P);
 
 	free(P.slex.src);
 	return 0;
@@ -80,7 +92,7 @@ static void parse_arguments (const uint32_t nargs, char **vargs, struct Program 
 		switch (op) {
 			case 's': P->args.in_name = optarg; break;
 			case 'o': P->args.out_name = optarg; break;
-			case 'p': P->args.precision = (int8_t) atoi(optarg); break;
+			case 'p': P->args.precision = (width_t) atoi(optarg); break;
 			case ':': errx(EXIT_FAILURE, "[fatal]: the '-%c' option requires an argument", optopt); break;
 			case '?': errx(EXIT_FAILURE, "[fatal]: the '-%c' option is unknown", optopt); break;
 			default:  print_usage();
@@ -90,8 +102,10 @@ static void parse_arguments (const uint32_t nargs, char **vargs, struct Program 
 	if (!P->args.in_name)
 		errx(EXIT_FAILURE, "[fatal]: cannot proceed without sheet.");
 
-	if ((P->args.precision >= CHAR_MAX) || (P->args.precision <= 0))
+	if (P->args.precision >= UCHAR_MAX)
 		P->args.precision = 1;
+
+	P->sdim.cellwidth = 10;
 }
 
 static void read_file (const char *const filename, struct SheetLexer *const slex)
@@ -142,11 +156,14 @@ static void lex_tables_content (struct Program *const P)
 	while (P->slex.at < P->slex.srcsz) {
 		ths_tokn->class = initializate_token_if_any(ths_tokn, &P->slex, &P->sdim);
 
+		if (ths_cell->exprlen == TOKEN_CONTAINTER_LEN)
+			fatal__(lexerr_max_cap_reached, &P->slex);
+
 		if (ths_tokn->class == TClass_space)
 			continue;
+
 		if (ths_tokn->class == TClass_nextcell) {
-			SET_TODO("solve cell");
-			ths_cell++;
+			solve_cell(ths_cell++, stream, P->args.precision, &P->sdim.cellwidth);
 			ths_tokn = &stream[0];
 			continue;
 		}
@@ -156,8 +173,11 @@ static void lex_tables_content (struct Program *const P)
 			P->slex.l_off = 0;
 			continue;
 		}
+		if (ths_tokn->class == TClass_reference)
+			ths_tokn->as.ref.ref = &P->grid[ths_tokn->as.ref.at];
 
 		ths_tokn++;
+		ths_cell->exprlen++;
 	}
 }
 
@@ -262,7 +282,39 @@ static void init_token_as_number (struct Token *const tok, struct SheetLexer *co
 	const size_t inc = ends - bgns - 1;
 	slex->l_off += inc;
 	slex->at    += inc;
-	tok->as.num.width = 1 + inc;
+	tok->as.num.width = inc + 1;
+}
+
+static void solve_cell (struct Cell *const cell, struct Token *const stream, width_t precision, width_t *finalwidth)
+{
+	if (cell->exprlen == 0) {
+		write_err_on_cell(CClass_empty, cell);
+		return;
+	}
+
+	switch (stream[0].class) {
+		case TClass_number:
+			cell->as.num.val = stream[0].as.num.val;
+			cell->width      = stream[0].as.num.width + precision;
+			cell->class		 = CClass_number;
+			break;
+		case TClass_string:
+			cell->as.txt.src = stream[0].as.txt.src;
+			cell->width		 = stream[0].as.txt.width;
+			cell->class		 = CClass_string;
+			break;
+		case TClass_reference:
+			break;
+		case TClass_expression:
+			break;
+		case TClass_clone:
+			break;
+		default:
+			write_err_on_cell(CClass_unknonwn_op, cell);
+			break;
+	}
+
+	*finalwidth = MAX_OF(*finalwidth, cell->width);
 }
 
 static void fatal__ (const enum LexErr wh, const struct SheetLexer *const slex)
@@ -274,6 +326,7 @@ static void fatal__ (const enum LexErr wh, const struct SheetLexer *const slex)
 		"[fatal:%d:%d]: malformed reference\n\x1b[5;31m%.*s\x1b[0m",
 		"[fatal:%d:%d]: reference outta bounds\n\x1b[5;31m%.*s\x1b[0m",
 		"[fatal:%d:%d]: number overflow\n\x1b[5;31m%.*s\x1b[0m",
+		"[fatal:%d:%d]: maximum capacity reached\n\x1b[5;31m%.*s\x1b[0m",
 	};
 
 	char *bgns = slex->src + slex->at - 1;
@@ -282,4 +335,41 @@ static void fatal__ (const enum LexErr wh, const struct SheetLexer *const slex)
 	while (!isspace(bgns[_show]) && bgns[_show])
 		_show++;
 	errx(EXIT_FAILURE, fmts[wh], slex->current_row, slex->l_off - 1, _show, bgns);
+}
+
+static void write_err_on_cell (const enum CellClass wh, struct Cell *const cell)
+{
+	static const struct ErrorCell errs[] = {
+		{"![empty-cell]",	13},
+		{"![unknown-op]",	13},
+	};
+
+	const struct ErrorCell *const e = &errs[wh];
+
+	cell->as.txt.src   = e->error;
+	cell->as.txt.width = e->width;
+	cell->width        = e->width;
+	cell->class		   = wh;
+}
+
+static void display_table (const struct Program *const P)
+{
+	const width_t width = P->sdim.cellwidth;
+
+	for (uint16_t row = 0; row < P->sdim.rows; row++) {
+		for (uint16_t col = 0; col < P->sdim.columns; col++) {
+			struct Cell *cell = &P->grid[row * P->sdim.columns + col];
+
+			if (cell->class == CClass_empty) {
+				printf("%*s  ", width, " ");
+			}
+			else if (cell->class == CClass_number) {
+				printf("%*.*Lf  ", width, P->args.precision, cell->as.num.val);
+			}
+			else {
+				printf("%-*.*s  ", cell->width, width, cell->as.txt.src);
+			}
+		}
+		putchar(10);
+	}
 }

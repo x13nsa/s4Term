@@ -33,6 +33,14 @@ enum TokenClass {
 	TClass_number		= 128,
 };
 
+enum CellClass {
+	CClass_empty		= 0,
+	CClass_unknonwn_op	= 1,
+
+	CClass_number		= 100,
+	CClass_string		= 101
+};
+
 union Value {
 	struct	{ long double val; width_t width; }	num;
 	struct	{ struct Cell *ref; uint32_t at; }	ref;
@@ -45,9 +53,10 @@ struct Token {
 };
 
 struct Cell {
-	union Value	as;
-	uint16_t	exprlen;
-	width_t		width;
+	union Value		as;
+	uint16_t		exprlen;
+	enum CellClass	class;
+	width_t			width;
 };
 
 struct SheetLexer {
@@ -59,13 +68,14 @@ struct SheetLexer {
 struct ExecArgs {
 	char	*in_name;
 	char	*out_name;
-	int8_t	precision;
+	width_t	precision;
 };
 
 struct SheetDimensions {
 	struct Cell	*toprightcell;
 	uint32_t	total_of_cells;
 	uint16_t	columns, rows;
+	width_t		cellwidth;
 };
 
 struct Program {
