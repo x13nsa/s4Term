@@ -145,9 +145,15 @@ static void lex_tables_content (struct Program *const P)
 		if (ths_tokn->class == TClass_space)
 			continue;
 		if (ths_tokn->class == TClass_nextcell) {
+			SET_TODO("solve cell");
+			ths_cell++;
+			ths_tokn = &stream[0];
 			continue;
 		}
 		if (ths_tokn->class == TClass_newline) {
+			ths_cell = &P->grid[++P->slex.current_row * P->sdim.columns];
+			ths_tokn = &stream[0];
+			P->slex.l_off = 0;
 			continue;
 		}
 
@@ -164,7 +170,6 @@ static enum TokenClass initializate_token_if_any (struct Token *const tok, struc
 		case '^':
 		case '=':
 		case '+':
-		case '-':
 		case '/':
 		case '*':
 		case '(':
@@ -179,27 +184,28 @@ static enum TokenClass initializate_token_if_any (struct Token *const tok, struc
 			init_token_as_reference(tok, slex, sdim);
 			return TClass_reference;
 		case ':':
+			SET_TODO("parse commands");
 			return TClass_command;
 	}
 
 	if (isspace(this)) return TClass_space;
-
-	bool isnumber = false;
-	if (isdigit(this)) isnumber = true;
+	if (isdigit(this)) goto __token_is_num;
 
 	const char next = slex->src[slex->at];
-	if (this == '-') {
-		if (isdigit(next)) isnumber = true;
-		else return TClass_sub_sign;
-	}
 
-	if (isnumber) {
-		init_token_as_number(tok, slex);
-		return TClass_number;
+	if (this == '-') {
+		if (isdigit(next)) goto __token_is_num;
+		return TClass_sub_sign;
 	}
 
 	fatal__(lexerr_unknown_token, slex);
 	return TClass_unknown;
+
+	__token_is_num:
+	{
+		init_token_as_number(tok, slex);
+		return TClass_number;
+	}
 }
 
 static void init_token_as_string (struct Token *const tok, struct SheetLexer *const slex)
@@ -219,7 +225,6 @@ static void init_token_as_string (struct Token *const tok, struct SheetLexer *co
 
 	slex->at    += *w + 1;
 	slex->l_off += *w + 1;
-	printf("token: <%.*s>\n", tok->as.txt.width, tok->as.txt.src);
 }
 
 static void init_token_as_reference (struct Token *const tok, struct SheetLexer *const slex, const struct SheetDimensions *const sdim)
@@ -243,8 +248,6 @@ static void init_token_as_reference (struct Token *const tok, struct SheetLexer 
 	const size_t diff = ends - (slex->src + slex->at);
 	slex->l_off += diff;
 	slex->at    += diff;
-
-	printf("token: <P=%d>\n", tok->as.ref.at);
 }
 
 static void init_token_as_number (struct Token *const tok, struct SheetLexer *const slex)
@@ -260,8 +263,6 @@ static void init_token_as_number (struct Token *const tok, struct SheetLexer *co
 	slex->l_off += inc;
 	slex->at    += inc;
 	tok->as.num.width = 1 + inc;
-
-	printf("token: <%Lf: %d>\n", *num, tok->as.num.width);
 }
 
 static void fatal__ (const enum LexErr wh, const struct SheetLexer *const slex)

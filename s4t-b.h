@@ -6,6 +6,7 @@
 
 #define	CHECK_PTR(p)			do { if (p) break; err(EXIT_FAILURE, "[fatal]: cannot continue"); } while (0)
 #define	MAX_OF(a, b)			((a) > (b) ? (a) : (b))
+#define	SET_TODO(a)				printf("\x1b[5mTODO: %s: %d : [%s]\x1b[0m\n", a, __LINE__, __FILE__)
 
 #include <stdio.h>
 #include <stdint.h>
